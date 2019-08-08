@@ -32,13 +32,17 @@ def add_point_tester(ds):
     # using np.inf instead of None or np.nan so we can check equality between arrays
 
     logging.debug('addpoints dict')
-    ds.add_points({'x': 0, 'y': 0, 'z': 0})
+    ds.append({'x': 0, 'y': 0, 'z': 0})
+    logging.debug(ds)
     logging.debug('addpoints items')
-    ds.add_points(1, np.inf, 1)
+    ds.append(1, np.inf, 1)
+    logging.debug(ds)
     logging.debug('addpoints kwargs')
-    ds.add_points(x=2, y=1, z=np.inf)
+    ds.append(x=2, y=1, z=np.inf)
+    logging.debug(ds)
     logging.debug('addpoints tuple')
-    ds.add_points((3, 2, 2))
+    ds.append((3, 2, 2))
+    logging.debug(ds)
 
 
 def check_post_add_point(ds):
@@ -55,16 +59,23 @@ def check_post_add_point(ds):
 def check_datastreams_equal(one, two):
     logging.debug('check_datastreams_equal')
     logging.debug(f"keys {one._keys, two._keys}")
-    logging.debug(f"points {one.points, two.points}")
+    logging.debug(f"points {one.array, two.array}")
 
     assert set(one._keys) == set(two._keys)
-    assert np.all(one.points == two.points)
+    assert np.all(one.array == two.array)
 
 
 def test_base_constructor():
     logging.debug('---------------Begin test_base_constructor()')
     ds = DataStream()
     assert ds.dtype == np.float64
+
+
+def test_construct_equal():
+    ds1 = DataStream()
+    add_point_tester(ds1)
+    ds2 = DataStream(ds1)
+    check_datastreams_equal(ds1, ds2)
 
 
 def test_dataType():
@@ -81,20 +92,20 @@ def test_add_points():
     check_post_add_point(ds)
 
     ds = DataStream()
-    ds.add_points(1,2)
-    # assert np.all(ds.points == np.array([[1],[2]]))
-    ds.add_points({'x':3,'y':4})
-    # assert np.all(ds.points == np.array([[1,3],[2,4]]))
-    ds.add_points((5,6))
-    # assert np.all(ds.points == np.array([[1,3,5],[2,4,6]]))
-    ds.add_points([[7],[8]])
-    # assert np.all(ds.points == np.array([[1,3,5,7],[2,4,6,8]]))
-    ds.add_points(y=10,x=9)
-    # assert np.all(ds.points == np.array([[1,3,5,7,9],[2,4,6,8,10]]))
-    ds.add_points([(11),(12)])
-    # assert np.all(ds.points == np.array([[1,3,5,7,9,11],[2,4,6,8,10,12]]))
-    ds.add_points(np.array([[13],[14]]))
-    # assert np.all(ds.points == np.array([[1,3,5,7,9,11,13],[2,4,6,8,10,12,14]]))
+    ds.append(1, 2)
+    # assert np.all(ds.array == np.array([[1],[2]]))
+    ds.append({'x':3, 'y':4})
+    # assert np.all(ds.array == np.array([[1,3],[2,4]]))
+    ds.append((5, 6))
+    # assert np.all(ds.array == np.array([[1,3,5],[2,4,6]]))
+    ds.append([[7], [8]])
+    # assert np.all(ds.array == np.array([[1,3,5,7],[2,4,6,8]]))
+    ds.append(y=10, x=9)
+    # assert np.all(ds.array == np.array([[1,3,5,7,9],[2,4,6,8,10]]))
+    ds.append([(11), (12)])
+    # assert np.all(ds.array == np.array([[1,3,5,7,9,11],[2,4,6,8,10,12]]))
+    ds.append(np.array([[13], [14]]))
+    # assert np.all(ds.array == np.array([[1,3,5,7,9,11,13],[2,4,6,8,10,12,14]]))
 
     assert np.all(ds['x'] == [1,3,5,7,9,11,13])
     assert np.all(ds['y'] == [2,4,6,8,10,12,14])
@@ -115,14 +126,14 @@ def test_extend_points():
     check_post_add_point(ds)
 
     ds = DataStream()
-    ds.add_points([1,3], [2,4])
-    # assert np.all(ds.points == np.array([[1,3],[2,4]]))
-    ds.add_points({'x':[5,7], 'y':[6,8]})
-    # assert np.all(ds.points == np.array([[1,3,5,7],[2,4,6,8]]))
-    ds.add_points(y=[10,12], x=[9,11])
-    # assert np.all(ds.points == np.array([[1,3,5,7,9,11],[2,4,6,8,10,12]]))
-    ds.add_points(np.array([[13,15],[14,16]]))
-    # assert np.all(ds.points == np.array([[1,3,5,7,9,11,13,15],[2,4,6,8,10,12,14,16]]))
+    ds.append([1, 3], [2, 4])
+    # assert np.all(ds.array == np.array([[1,3],[2,4]]))
+    ds.append({'x':[5, 7], 'y':[6, 8]})
+    # assert np.all(ds.array == np.array([[1,3,5,7],[2,4,6,8]]))
+    ds.append(y=[10, 12], x=[9, 11])
+    # assert np.all(ds.array == np.array([[1,3,5,7,9,11],[2,4,6,8,10,12]]))
+    ds.append(np.array([[13, 15], [14, 16]]))
+    # assert np.all(ds.array == np.array([[1,3,5,7,9,11,13,15],[2,4,6,8,10,12,14,16]]))
 
     assert np.all(ds['x'] == [1,3,5,7,9,11,13,15])
     assert np.all(ds['y'] == [2,4,6,8,10,12,14,16])
@@ -144,49 +155,49 @@ def test_add_point_error():
     logging.debug('---------------Start exceptions')
     with pytest.raises(ValueError):
         try:
-            ds.add_points((0, 1))
+            ds.append((0, 1))
         except Exception as e:
             logging.debug(e)
             raise
     with pytest.raises(ValueError):
         try:
-            ds.add_points(0, 1)
+            ds.append(0, 1)
         except Exception as e:
             logging.debug(e)
             raise
     with pytest.raises(ValueError):
         try:
-            ds.add_points(x=0, y=1)
+            ds.append(x=0, y=1)
         except Exception as e:
             logging.debug(e)
             raise
     with pytest.raises(ValueError):
         try:
-            ds.add_points({'y':99, 'z':10})
+            ds.append({'y':99, 'z':10})
         except Exception as e:
             logging.debug(e)
             raise
     with pytest.raises(ValueError):
         try:
-            ds.add_points((0, 1, 2, 3))
+            ds.append((0, 1, 2, 3))
         except Exception as e:
             logging.debug(e)
             raise
     with pytest.raises(ValueError):
         try:
-            ds.add_points(0, 1, 2, 3)
+            ds.append(0, 1, 2, 3)
         except Exception as e:
             logging.debug(e)
             raise
     with pytest.raises(ValueError):
         try:
-            ds.add_points(x=0, y=1, z=2, w=3)
+            ds.append(x=0, y=1, z=2, w=3)
         except Exception as e:
             logging.debug(e)
             raise
     with pytest.raises(ValueError):
         try:
-            ds.add_points({'x':0, 'y':99, 'z':10, 'w':1})
+            ds.append({'x':0, 'y':99, 'z':10, 'w':1})
         except Exception as e:
             logging.debug(e)
             raise
@@ -203,10 +214,10 @@ def test_record_file_csv():
 
     ds = DataStream(record_to_file=file)
 
-    ds.add_points(dict2)
+    ds.append(dict2)
     assert open(file, 'r').read() == (os.linesep).join(['x,y', '1.0,1.0'])+os.linesep
 
-    ds.add_points(dict2)
+    ds.append(dict2)
     assert open(file, 'r').read() == (os.linesep).join(['x,y', '1.0,1.0', '1.0,1.0'])+os.linesep
 
 
@@ -220,10 +231,10 @@ def test_record_file_dict():
     dict2 = {'x': 1.0, 'y': 1.0}
 
     ds = DataStream(record_to_file=file, file_format='dict')
-    ds.add_points(dict2)
+    ds.append(dict2)
     assert str({'x':1.0,'y':1.0}) + os.linesep == open(file, 'r').readlines()[-1]
 
-    ds.add_points(dict2)
+    ds.append(dict2)
     assert str({'x':1.0,'y':1.0}) + os.linesep == open(file, 'r').readlines()[-1]
 
 
@@ -237,9 +248,9 @@ def test_record_file_list():
     dict2 = {'x': 1.0, 'y': 1.0}
 
     ds = DataStream(record_to_file=file, file_format='list')
-    ds.add_points(dict2)
+    ds.append(dict2)
     assert 'x,y' + os.linesep + str(list(dict2.values())) + os.linesep == open(file, 'r').read()
     assert str(list(dict2.values())) + os.linesep == open(file, 'r').readlines()[-1]
 
-    ds.add_points(dict2)
+    ds.append(dict2)
     assert str(list(dict2.values())) + os.linesep == open(file, 'r').readlines()[-1]
