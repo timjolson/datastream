@@ -6,45 +6,44 @@ without sacrificing numpy indexing/slicing features.
 
 ## DictArray
 
-Wrapper around `np.array` that can use keys to access the first axis.
+Wrapper around np.array that can use keys to access first axis.
 
-    DictArray(data=None, **kwargs)
-    `kwargs` are passed to np.array after processing `data`
-
-    `data` can be any of `None`, `DictArray`, `dict of lists`, `dict of values`,
+    DictArray(data=None, **kwargs) -> np.array(~data, **kwargs)
+        data: can be any of `None`, `DictArray`, `dict of lists`, `dict of values`,
             `list of lists`, `list of dicts`, `list of values`, `np.recarray`, `np.ndarray`
-    
-    *note `list` here can be a sequence with `__iter__`
+        kwargs: passed to np.array() after processing `data`
+        NOTE: any `list` in above formats can be a sequence with __iter__
 
-#### Methods
-
+    Methods:
+    .append(*data, **kwargs): add data to the array, where `data` fits format
+            above, OR keywords can be used
     .keys() ~= dict().keys()
     .items() ~= dict().items()
     .values() ~= dict().values()
     .as_dict() returns dict version of .items()
     
-    np.array attributes are implicitly delegated to obj.points
+    CAUTION: keys can be any valid dict key, except the types
+        tuple/slice/list/int/np.ndarray that have no custom handling.
+
+    All np.array attributes are implicitly delegated to DictArray().array
 
 #### Example Usage:
-    obj = DictArray([0,1])
-    obj['x'] == obj[0] == obj[0,:] == [0]
-    obj['x',0] == obj[0,0] == 0
-    obj['y'] == obj[1] == obj[1,:] == [1]
-    obj['y',0] == obj[1,0] == 1
-
-    obj = DictArray([[0,2,4],[1,3,5])
+    obj = DictArray([[0,2,4],[1,3,5]])
     obj['x'] == obj[0] == obj[0,:] == [0,2,4]
-    obj['x',1] == obj[0,1] == 1
+    obj['x',1] == obj[0,1] == 2
     obj['y'] == obj[1] == obj[1,:] == [1,3,5]
     obj['y',1] == obj[1,1] == 3
 
+    x, y = object(), object()
+    obj = DictArray({x:[0], y:[1]})
+    obj[x] == obj[0] == obj[0,:] == [0]
+    obj[x,0] == obj[0,0] == 0
+    obj[y] == obj[1] == obj[1,:] == [1]
+    obj[y,0] == obj[1,0] == 1
+
 ## DataStream
 
-`DictArray` with data appending and recording functions.
-    
-    .add_points(*data, **kwargs)
-        add data points to DataStream where `data` matches a format 
-        supported by DictArray(), OR keywords can be used
+DictArray with data recording functions.
 
     .set_record_file(file, format)
         set a file/object/function used to record data points.
@@ -55,6 +54,8 @@ Wrapper around `np.array` that can use keys to access the first axis.
             logging.Handler -> uses Handler.handle(logging.getLogRecordFactory(msg))
             callable -> calls, passing the new data point, unformatted
         `format`: str: 'csv', 'dict', or 'list'
+
+    .append  # extended to record new data when applicable
 
     .start_recording()  # begin recording appended data 
     .stop_recording()  # stop recording appended data

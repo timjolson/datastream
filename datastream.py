@@ -10,9 +10,6 @@ _ascii_fields = string.ascii_letters[23:26] + string.ascii_letters[0:23]
 class DictArray():
     """Wrapper around np.array that can use keys to access first axis.
 
-    CAUTION: keys can be any valid dict key, except the types
-            tuple/slice/list/int/np.ndarray that have no custom handling.
-
     DictArray(data=None, **kwargs) -> np.array(~data, **kwargs)
         data: can be any of `None`, `DictArray`, `dict of lists`, `dict of values`,
             `list of lists`, `list of dicts`, `list of values`, `np.recarray`, `np.ndarray`
@@ -22,13 +19,15 @@ class DictArray():
     Methods:
     .append(*data, **kwargs): add data to the array, where `data` fits format
             above, OR keywords can be used
-
     .keys() ~= dict().keys()
     .items() ~= dict().items()
     .values() ~= dict().values()
     .as_dict() returns dict version of .items()
 
-    All np.array attributes are implicitly delegated to obj.array
+    CAUTION: keys can be any valid dict key, except the types
+        tuple/slice/list/int/np.ndarray that have no custom handling.
+
+    All np.array attributes are implicitly delegated to DictArray().array
 
     Examples:
         obj = DictArray([[0,2,4],[1,3,5]])
@@ -154,9 +153,15 @@ class DictArray():
 class DataStream(DictArray):
     """DictArray with data recording functions.
 
-    .set_record_file(file, format) set how/where to record data
-        where `file` can be any of:
-        str, io.IOBase, logging.Logger, logging.Handler, callable
+    .set_record_file(file, format)
+        set a file/object/function used to record data points.
+        `file`:
+            str -> filepath -> .write(msg)
+            io.IOBase -> uses .write(msg)
+            logging.Logger -> uses Logger.info(msg)
+            logging.Handler -> uses Handler.handle(logging.getLogRecordFactory(msg))
+            callable -> calls, passing the new data point, unformatted
+        `format`: str: 'csv', 'dict', or 'list'
 
     .start_recording()
     .stop_recording()
