@@ -8,40 +8,78 @@ _ascii_fields = string.ascii_letters[23:26] + string.ascii_letters[0:23]
 
 
 class DictArray():
-    """Wrapper around np.array that can use keys for first axis.
+    """Wrapper around np.array that can use keys to access first axis.
 
-    kwargs are passed to np.array after processing `data`
-    DictArray(data=None, **kwargs)
+    CAUTION: keys can be any valid dict key, except the types
+            tuple/slice/list/int/np.ndarray that have no custom handling.
+
+    DictArray(data=None, **kwargs) -> np.array(~data, **kwargs)
+        data: can be any of `None`, `DictArray`, `dict of lists`, `dict of values`,
+            `list of lists`, `list of dicts`, `list of values`, `np.recarray`, `np.ndarray`
+        kwargs: passed to np.array() after processing `data`
+        NOTE: any `list` in above formats can be a sequence with __iter__
+
+    Methods:
+    .append(*data, **kwargs): add data to the array, where `data` fits format
+            above, OR keywords can be used
 
     .keys() ~= dict().keys()
     .items() ~= dict().items()
     .values() ~= dict().values()
     .as_dict() returns dict version of .items()
 
-    data can be any of `None`, `DictArray`, `dict of lists`, `dict of values`,
-        `list of lists`, `list of dicts`, `list of values`, `np.recarray`, `np.ndarray`
-        *any `list` can be a sequence with __iter__
-
-    np.array attributes are implicitly delegated to obj.points
+    All np.array attributes are implicitly delegated to obj.array
 
     Examples:
-        obj = DictArray([0,1])
-        obj['x'] == obj[0] == obj[0,:] == [0]
-        obj['x',0] == obj[0,0] == 0
-        obj['y'] == obj[1] == obj[1,:] == [1]
-        obj['y',0] == obj[1,0] == 1
-
-        obj = DictArray([[0,2,4],[1,3,5])
+        obj = DictArray([[0,2,4],[1,3,5]])
         obj['x'] == obj[0] == obj[0,:] == [0,2,4]
-        obj['x',1] == obj[0,1] == 1
+        obj['x',1] == obj[0,1] == 2
         obj['y'] == obj[1] == obj[1,:] == [1,3,5]
         obj['y',1] == obj[1,1] == 3
+
+        x, y = object(), object()
+        obj = DictArray({x:[0], y:[1]})
+        obj[x] == obj[0] == obj[0,:] == [0]
+        obj[x,0] == obj[0,0] == 0
+        obj[y] == obj[1] == obj[1,:] == [1]
+        obj[y,0] == obj[1,0] == 1
 
     Written by Tim Olson - timjolson@user.noreplay.github.com
     """
     def __init__(self, data=None, **kwargs):
         self._keys = ()
-        self.points, self._keys = self._process_data(data, **kwargs)
+        self.array, self._keys = process_data((), data, **kwargs)
+        self._map_key_to_index = {k: i for i, k in enumerate(self._keys)}
+
+    def append(self, *data, **kwargs):
+        """Add data, after processing.
+
+        :param data: data in format supported by DictArray()
+        :param kwargs: keywords specifying data
+        :return: np.ndarray: the processed, appended data
+        """
+        if not data and not kwargs:
+            raise ValueError("No point provided")
+        elif not data and kwargs:
+            data = kwargs
+        elif len(data) == 1:
+            data = data[0]
+
+        data, names = process_data(self._keys, data)
+        oldlength = self.array.size
+        if oldlength == 0:
+            self.array = data.copy()
+            self._keys = names
+            self._map_key_to_index = {k: i for i, k in enumerate(names)}
+        else:
+            self.array = np.concatenate([self.array, data], 1)
+        return data
+
+    def __getattr__(self, attr):
+        try:
+            return self.__dict__[attr]
+        except KeyError:
+            return getattr(self.array, attr)
 
     def keys(self):
         for k in self._keys:
@@ -58,113 +96,63 @@ class DictArray():
     def as_dict(self):
         return dict(self.items())
 
-    def _process_data(self, data, **kwargs):
-        dt = data_type(data)
-        if dt in (None, 'empty'):
-            return np.array([], **kwargs), ()
-        elif dt == 'listOfLists':
-            sample = data[0]
-            if hasattr(data, '_fields'):  # namedtuple
-                names = data._fields
-            elif hasattr(sample, '_fields'):  # namedtuple
-                names = sample._fields
-            else:
-                names = self._keys or [_ascii_fields[i] for i in range(len(data))]
-        elif dt == 'listOfDicts':
-            sample = data[0]
-            names = list(sample.keys())
-            vv = []
-            for k in sample.keys():  # curve names
-                pp = []  # data for curve
-                for p in data:  # each data point
-                    pp.append(p[k])  # coordinate
-                vv.append(pp)  # data for curve
-            data = vv
-        elif dt == 'listOfValues':
-            if hasattr(data, '_fields'):  # namedtuple
-                names = data._fields
-            else:
-                names = self._keys or [_ascii_fields[i] for i in range(len(data))]
-            data = [[d] for d in data]
-        elif dt == 'dictOfLists':
-            names, data = list(data.keys()), list(data.values())
-        elif dt == 'dictOfValues':
-            names, data = list(data.keys()), [[d] for d in data.values()]
-        elif dt == 'recarray':
-            names = data.dtype['names']
-        elif dt == 'ndarray':
-            names = self._keys or [_ascii_fields[i] for i in range(len(data))]
-        elif dt == 'DataStream':
-            names = tuple(data._keys)
-            data = data.points.copy()
-        else:
-            raise NotImplementedError(f"Cannot handle '{dt}' {data}")
-
-        if self._keys and len(self._keys) != len(data): raise ValueError(
-            f"Improper data count ({len(data)}) provided, need ({len(self._keys)})")
-
-        data = np.array(data, **kwargs)
-
-        if self._keys:  # we have column names
-            sdata = np.ones_like(data) * np.nan  # sorted data
-
-            for i, k in enumerate(self._keys):  # sort incoming data columns
-                sdata[i, :] = data[names.index(k)][:]
-            return sdata, self._keys
-        else:  # set data column names
-            self._keys = tuple(names)
-            return data.copy(), tuple(names)
-
-    def __getattr__(self, attr):
-        try:
-            return self.__dict__[attr]
-        except KeyError:
-            return getattr(self.points, attr)
-
-    def _process_item_key(self, key):
-        if isinstance(key, str):
-            if key in self._keys:
-                key = self._keys.index(key)
-            else:  # force KeyError
-                a = dict()[key]
+    def _process_item_key(self, key, axis=0):
+        # TODO: add float handling
+        if isinstance(key, (int, slice, np.ndarray)):
+            pass
         elif isinstance(key, tuple):
-            if isinstance(key[0], str):  # handle string indexing -> column name
-                if len(key) > 1:
-                    key = self._keys.index(key[0]), *key[1:]
-                else:
-                    key = self._keys.index(key[0]),
+            key = tuple(self._process_item_key(k, i) for i,k in enumerate(key))
+        elif axis == 0:
+            if isinstance(key, list):
+                key = list(self._process_item_key(k, axis) for k in key)
+            else:
+                key = self._map_key_to_index[key]
+        else:
+            raise IndexError(f"index `{key}` not an option for axis {axis}")
         return key
 
     def __getitem__(self, key):
         key = self._process_item_key(key)
-        return self.points.__getitem__(key)
+        return self.array[key]
 
     def __setitem__(self, key, value):
         key = self._process_item_key(key)
-        return self.points.__setitem__(key, value)
+        return self.array.__setitem__(key, value)
 
     def __len__(self):
-        if hasattr(self, 'points'):
-            return self.points.__len__()
+        if hasattr(self, 'array'):
+            return self.array.__len__()
         else:
             return 0
 
+    def __ge__(self, other):
+        return self.array.__ge__(other)
+
+    def __le__(self, other):
+        return self.array.__le__(other)
+
+    def __gt__(self, other):
+        return self.array.__gt__(other)
+
+    def __lt__(self, other):
+        return self.array.__lt__(other)
+
     def __eq__(self, other):
-        return other == self.points
+        return self.array.__eq__(other)
+
+    def __ne__(self, other):
+        return self.array.__ne__(other)
 
     def __repr__(self):
-        if self.points.size > 0:
-            dd = {k: self.points[i] for i, k in enumerate(self._keys)}
+        if self.array.size > 0:
+            dd = {k: self.array[i] for i, k in enumerate(self._keys)}
         else:
             dd = {k: [] for i, k in enumerate(self._keys)}
         return f"{type(self).__name__}({dd})"
 
 
 class DataStream(DictArray):
-    """DictArray with data recording and convenience functions.
-
-    .add_points(*data, **kwargs) where `data` matches a format
-        supported by DictArray(), OR keywords can be used
+    """DictArray with data recording functions.
 
     .set_record_file(file, format) set how/where to record data
         where `file` can be any of:
@@ -183,32 +171,14 @@ class DataStream(DictArray):
         self._pause = pause if (pause is not None) else (record_to_file is None)
         self.set_record_file(record_to_file, format=file_format)
 
-    def add_points(self, *data, **kwargs):
-        """Add data points to DataStream, after some formatting and error checking.
-        If applicable, records the new data via the set up recorder.
-
-        :param data: data in format supported by DictArray()
-        :param kwargs: keywords specifying data points
-        :return:
-        """
-        if not data and not kwargs:
-            raise ValueError("No point provided")
-        elif not data and kwargs:
-            data = kwargs
-        elif len(data) == 1:
-            data = data[0]
-
-        data, names = self._process_data(data)
-        oldlength = self.points.size
-        if oldlength == 0:
-            self.points = data.copy()
-        else:
-            self.points = np.concatenate([self.points, data], 1)
+    def append(self, *data, **kwargs):
+        data = super().append(*data, **kwargs)
         if not self._pause and self._recorder:
             if not self._file_inited:
                 self._init_file()
             for p in data.T:
                 self._recorder(p)
+        return data
 
     def start_recording(self):
         self._pause = False
@@ -217,7 +187,7 @@ class DataStream(DictArray):
         self._pause = True
 
     def set_record_file(self, file, format='csv'):
-        """Set a file/object/function used to record data points.
+        """Set a file/object/function used to record data array.
 
         :param file:
                 str -> filepath -> .write()
@@ -291,6 +261,63 @@ class DataStream(DictArray):
             if not self._file_inited:
                 self._init_file()
             self._recorder(point)
+
+
+def process_data(keys, data, **kwargs):
+    dt = data_type(data)
+    if dt in (None, 'empty'):
+        return np.array([], **kwargs), ()
+    elif dt == 'listOfLists':
+        sample = data[0]
+        if hasattr(data, '_fields'):  # namedtuple
+            names = data._fields
+        elif hasattr(sample, '_fields'):  # namedtuple
+            names = sample._fields
+        else:
+            names = keys or [_ascii_fields[i] for i in range(len(data))]
+    elif dt == 'listOfDicts':
+        sample = data[0]
+        names = list(sample.keys())
+        vv = []
+        for k in sample.keys():  # curve names
+            pp = []  # data for curve
+            for p in data:  # each data point
+                pp.append(p[k])  # coordinate
+            vv.append(pp)  # data for curve
+        data = vv
+    elif dt == 'listOfValues':
+        if hasattr(data, '_fields'):  # namedtuple
+            names = data._fields
+        else:
+            names = keys or [_ascii_fields[i] for i in range(len(data))]
+        data = [[d] for d in data]
+    elif dt == 'dictOfLists':
+        names, data = list(data.keys()), list(data.values())
+    elif dt == 'dictOfValues':
+        names, data = list(data.keys()), [[d] for d in data.values()]
+    elif dt == 'recarray':
+        names = data.dtype['names']
+    elif dt == 'ndarray':
+        names = keys or [_ascii_fields[i] for i in range(len(data))]
+    elif dt == 'DictArray':
+        names = tuple(data._keys)
+        data = data.array.copy()
+    else:
+        raise NotImplementedError(f"Cannot handle '{dt}' {data}")
+
+    if keys and len(keys) != len(data): raise ValueError(
+        f"Improper data count ({len(data)}) provided, need ({len(keys)})")
+
+    data = np.array(data, **kwargs)
+
+    if keys:  # we have column names
+        sdata = np.ones_like(data) * np.nan  # sorted data
+
+        for i, k in enumerate(keys):  # sort incoming data columns
+            sdata[i, :] = data[names.index(k)][:]
+        return sdata, keys
+    else:  # set data column names
+        return data.copy(), tuple(names)
 
 
 def data_type(obj):
