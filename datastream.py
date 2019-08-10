@@ -301,7 +301,8 @@ def process_data(keys, data, **kwargs):
     elif dt == 'dictOfValues':
         names, data = list(data.keys()), [[d] for d in data.values()]
     elif dt == 'recarray':
-        names = data.dtype['names']
+        names = data.dtype.names
+        data = list(map(lambda *a: list(a), *data))
     elif dt == 'ndarray':
         names = keys or [_ascii_fields[i] for i in range(len(data))]
     elif dt == 'DictArray':
