@@ -20,15 +20,15 @@ loadfileformats = {
     'somedicts_oneline':{'file':'oneLine', 'data':'listOfDicts', 'header':None},
     'some_lists':{'file':'multiLine', 'data':'listOfValues', 'header':None},
     'somelists_oneline':{'file':'oneLine', 'data':'listOfLists', 'header':None},
-    'listoflists_multiline':{'file':'multiLine', 'data':'listOfLists', 'header':None},
+    'list_of_lists_multiline':{'file':'multiLine', 'data':'listOfLists', 'header':None},
     'np_save_arr.npy':{'file':'numpy', 'data':'save', 'header':None},
     'np_savetxt_arr':{'file':'numpy-csv', 'data':'text', 'header':None},
     'np_savetxt_arr_header':{'file':'numpy-csv', 'data':'text', 'header':('x', 'y', 'time')},
     'np_savetxt_arr_header_delim':{'file':'numpy-csv', 'data':'text', 'header':('x', 'y', 'time')},
     'np_save_structuredarray.npy':{'file':'numpy', 'data':'save-structuredarray', 'header':('x', 'y', 'time')},
-    'np_savetxt_structuredarray':{'file':'numpy-csv', 'data':'text', 'header':None},
-    'np_savetxt_structuredarray_header':{'file':'numpy-csv', 'data':'text', 'header':('x', 'y', 'time')},
-    'np_savetxt_structuredarray_header_delim':{'file':'numpy-csv', 'data':'text', 'header':('x', 'y', 'time')},
+    'np_savetxt_structarr':{'file':'numpy-csv', 'data':'text', 'header':None},
+    'np_savetxt_structarr_header':{'file':'numpy-csv', 'data':'text', 'header':('x', 'y', 'time')},
+    'np_savetxt_structarr_header_delim':{'file':'numpy-csv', 'data':'text', 'header':('x', 'y', 'time')},
 }
 filenames = [os.path.join(data_set_dir,f) for f in loadfileformats]
 for f in list(loadfileformats.keys()):
@@ -51,11 +51,14 @@ def test_parse_format():
 def test_parse_file():
     for f in filenames:
         r = DataStream(f)
-        if not f.endswith('empty'):
-            assert np.array_equal(r, ds)
+        if f.endswith('empty'):
+            # empty test
+            assert r.size == 0
+        else:
+            assert np.array_equal(r, ds)  # actual data is same
             if f.find('dict') != -1 or f.find('header') != -1 or f.find('save_struct') != -1:
+                # should have correct keys based on file name
                 assert set(r.keys()) == ds_keys
             else:
+                # uses default keys order
                 assert set(r.keys()) == set(['x', 'y', 'z'])
-        else:
-            assert r.size == 0
