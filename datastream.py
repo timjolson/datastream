@@ -4,6 +4,9 @@ import sys
 import io
 import string
 import numpy as np
+import json
+import csv
+import ast
 _ascii_fields = string.ascii_letters[23:26] + string.ascii_letters[0:23]
 
 
@@ -168,11 +171,14 @@ class DataStream(DictArray):
 
     Written by Tim Olson - timjolson@user.noreplay.github.com
     """
-    def __init__(self, data=None, record_to_file=None, pause=None, file_format='csv'):
-        super().__init__(data, dtype=np.float64)
+    def __init__(self, data=None, record_to_file=None, pause=None, file_format='csv', **kwargs):
+        if isinstance(data, str):
+            data, self.file_format = DataFileIO.parse_file(data, kwargs or None)
+            for k in ['file', 'data', 'delimiter', 'dialect']:
+                kwargs.pop(k, None)
+        super().__init__(data, **kwargs)
         self._file_inited = False
         self._recorder = lambda *x, **y: None
-        self.file_format = file_format
         self._pause = pause if (pause is not None) else (record_to_file is None)
         self.set_record_file(record_to_file, format=file_format)
 
@@ -372,4 +378,219 @@ def is_sequence(obj):
                 hasattr(obj, 'implements') and obj.implements('MetaArray'))
 
 
-__all__ = ['DictArray', 'DataStream', 'is_sequence', 'data_type']
+class DataFileIO():
+    @staticmethod
+    def parse_from_format(filename, file_format):
+        ff = file_format
+
+        if ff['file'].lower().startswith('numpy'):
+            ff.setdefault('data', 'save')
+            if ff['data'] == 'save':
+                np.load(open(filename, 'rb'))
+            elif ff['data'].startswith('text'):
+                return DataFileIO.parse_from_format(filename, dict(ff, **{'file': 'csv'}), _skip=True)
+            else:
+                raise NotImplementedError
+        elif ff['file'].lower() == 'csv':
+            ff.setdefault('dialect', None)
+            ff.setdefault('delimiter', ',')
+            kw = {'fname': filename, 'unpack': True}
+            if ff['dialect']:
+                kw.update(delimiter=ff['dialect'].delimiter)
+            elif ff['delimiter']:
+                kw.update(delimiter=ff['delimiter'])
+
+            try:
+                data = np.genfromtxt(**kw, dtype=np.float, names=True)
+            except ValueError as e:
+                print(repr(e))
+                data = np.genfromtxt(**kw, dtype=np.float)
+            return data
+        elif ff['file'] == 'json':
+            return json.load(open(filename))
+        else:
+            return DataFileIO.do_literal(ff, filename)
+
+    @staticmethod
+    def parse_file(filename, file_format=None):
+        if file_format is not None:
+            return DataFileIO.parse_from_format(filename, file_format), file_format
+
+        ff = {'data':None, 'file':None, 'header':None, 'dialect':None}
+        data = DataFileIO.detect_format(ff, filename)
+
+        if data is not None:
+            return data, ff
+
+        if ff['file'] == 'empty':
+            return data, ff
+        elif ff['file'] == 'numpy':
+            data = DataFileIO.do_numpy_csv(ff, filename)
+        elif ff['file'] is None:
+            try:
+                data = json.load(open(filename))
+            except json.JSONDecodeError as e:
+                data = DataFileIO.do_numpy_csv(ff, filename)
+        elif ff['file'] == 'multiLine':
+            data = DataFileIO.do_literal(ff, filename)
+        else:
+            raise NotImplementedError(ff)
+
+        # if isinstance(data, np.ndarray):
+        #     if data.dtype.names:
+        #         keys = tuple(data.dtype.names)
+        # elif ff['data'].startswith('dict'):
+        #     keys = tuple(data.keys())
+        # elif ff['data'] == 'listOfDicts':
+        #     keys = tuple(data[0].keys())
+
+        return data, ff
+
+    @staticmethod
+    def readnlines(file, n=0):
+        if n == -1:
+            return file.readlines()
+        if n == 0:
+            return file.read()
+        rv = []
+        for i in range(n):
+            line = file.readline()
+            if line:
+                rv.append(line)
+        return rv
+
+    @staticmethod
+    def detect_format(ff, filename):
+        file = open(filename)
+
+        try:
+            samplelines = DataFileIO.readnlines(file, 4)
+        except UnicodeDecodeError as e:
+            ff['file'] = 'numpy'
+            return
+
+        n_samplelines = len(samplelines)
+
+        if n_samplelines in [0, 1]:
+            if n_samplelines == 0 or samplelines[0].strip(' \t\n\r') == '':
+                ff['file'] = 'empty'
+                return []
+
+        if samplelines[0][0] in "[({":
+            try:
+                sample = ast.literal_eval(samplelines[0])
+            except SyntaxError:
+                if samplelines[0][1] in "[({":
+                    sample = ast.literal_eval(samplelines[0][1:])
+            if isinstance(sample, dict):
+                ff['data']='dict'
+                itemsample = list(sample.values())[0]
+                if is_sequence(itemsample):
+                    ff['data']+='OfLists'
+                elif n_samplelines == 1:
+                    ff['data']+='OfValues'
+                else:
+                    ff['data']='listOfDicts'
+
+                if n_samplelines == 1:
+                    ff['file'] = 'oneLine'
+                else:
+                    ff['file'] = 'multiLine'
+
+            elif is_sequence(sample):
+                ff['data']='list'
+                itemsample = sample[0]
+                if isinstance(itemsample, dict):
+                    ff['data']+='OfDicts'
+                elif is_sequence(itemsample):
+                    ff['data']+='OfLists'
+                else:
+                    ff['data']+='OfValues'
+
+                if n_samplelines == 1:
+                    ff['file'] = 'oneLine'
+                else:
+                    ff['file'] = 'multiLine'
+            else:
+                raise TypeError(type(sample), sample)
+        else:
+            samplestr = ''.join(samplelines)
+            dialect = None
+            header = None
+
+            try:
+                dialect = csv.Sniffer().sniff(samplestr)
+            except csv.Error:
+                if n_samplelines > 1:
+                    sample_without_header = ''.join(samplelines[1:])
+                    try:
+                        dialect = csv.Sniffer().sniff(sample_without_header)
+                    except csv.Error:
+                        pass
+                    else:
+                        header = samplelines[0]
+            if dialect:
+                ff['dialect'] = dialect
+            if not header:
+                try:
+                    hasheader = csv.Sniffer().has_header(samplestr)
+                except csv.Error:
+                    pass
+                else:
+                    header = samplelines[0] if hasheader else None
+            ff['header'] = header
+
+        if ff['file'] == 'oneLine':
+            return sample
+        return None
+
+    @staticmethod
+    def do_literal(ff, filename):
+        file = open(filename)
+
+        if ff['data'] == 'listOfLists':
+            data = ast.literal_eval(file.read())
+            data = list(map(lambda *a: list(a), *data))
+        elif ff['data'] == 'listOfDicts':
+            if ff['file']=='multiLine':
+                data = [ast.literal_eval(l) for l in file.readlines()]
+            else:
+                raise NotImplementedError
+        elif ff['data'] == 'listOfValues':
+            data = [ast.literal_eval(l) for l in file.readlines()]
+            data = list(map(lambda *a: list(a), *data))  # transpose
+        elif ff['data'] == 'dictOfLists':
+            data = ast.literal_eval(file.read())
+        elif ff['data'] == 'empty':
+            data = []
+        else:
+            raise NotImplementedError(ff)
+
+        return data
+
+    @staticmethod
+    def do_numpy_csv(ff, filename):
+        file = open(filename, 'rb')
+        try:
+            data = np.load(file)
+            ff['data'] = 'save'
+            ff['file'] = 'numpy'
+        except ValueError:
+            kw = {'fname':filename, 'unpack':True}
+            if ff['dialect']:
+                kw.update(delimiter=ff['dialect'].delimiter)
+            if ff['header']:
+                kw.update(names=True)
+            data = np.genfromtxt(**kw, dtype=np.float)
+            ff['data'] = 'text'
+            ff['file'] = 'numpy-csv'
+
+        if data.dtype.names is not None:
+            ff['header'] = data.dtype.names
+            if ff['data'] != 'text':
+                ff['data'] += '-structuredarray'
+
+        return data
+
+
+__all__ = ['DictArray', 'DataStream']
