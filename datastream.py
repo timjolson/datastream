@@ -173,9 +173,7 @@ class DataStream(DictArray):
     """
     def __init__(self, data=None, record_to_file=None, pause=None, file_format='csv', **kwargs):
         if isinstance(data, str):
-            data, self.file_format = DataFileIO.parse_file(data, kwargs or None)
-            for k in ['file', 'data', 'delimiter', 'dialect']:
-                kwargs.pop(k, None)
+            data, self.file_format = DataFileIO.parse_file(data)
         super().__init__(data, **kwargs)
         self._file_inited = False
         self._recorder = lambda *x, **y: None
@@ -380,42 +378,7 @@ def is_sequence(obj):
 
 class DataFileIO():
     @staticmethod
-    def parse_from_format(filename, file_format):
-        ff = file_format
-
-        if ff['file'].lower().startswith('numpy'):
-            ff.setdefault('data', 'save')
-            if ff['data'] == 'save':
-                np.load(open(filename, 'rb'))
-            elif ff['data'].startswith('text'):
-                return DataFileIO.parse_from_format(filename, dict(ff, **{'file': 'csv'}), _skip=True)
-            else:
-                raise NotImplementedError
-        elif ff['file'].lower() == 'csv':
-            ff.setdefault('dialect', None)
-            ff.setdefault('delimiter', ',')
-            kw = {'fname': filename, 'unpack': True}
-            if ff['dialect']:
-                kw.update(delimiter=ff['dialect'].delimiter)
-            elif ff['delimiter']:
-                kw.update(delimiter=ff['delimiter'])
-
-            try:
-                data = np.genfromtxt(**kw, dtype=np.float, names=True)
-            except ValueError as e:
-                print(repr(e))
-                data = np.genfromtxt(**kw, dtype=np.float)
-            return data
-        elif ff['file'] == 'json':
-            return json.load(open(filename))
-        else:
-            return DataFileIO.do_literal(ff, filename)
-
-    @staticmethod
-    def parse_file(filename, file_format=None):
-        if file_format is not None:
-            return DataFileIO.parse_from_format(filename, file_format), file_format
-
+    def parse_file(filename):
         ff = {'data':None, 'file':None, 'header':None, 'dialect':None}
         data = DataFileIO.detect_format(ff, filename)
 
