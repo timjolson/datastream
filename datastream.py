@@ -379,8 +379,8 @@ def is_sequence(obj):
 class DataFileIO():
     @staticmethod
     def parse_file(filename):
-        ff = {'data':None, 'file':None, 'header':None, 'dialect':None}
-        data = DataFileIO.detect_format(ff, filename)
+        logger.info(f"parse_file `{filename}`")
+        data, ff = DataFileIO.detect_format(filename)
 
         if data is not None:
             return data, ff
@@ -399,14 +399,7 @@ class DataFileIO():
         else:
             raise NotImplementedError(ff)
 
-        # if isinstance(data, np.ndarray):
-        #     if data.dtype.names:
-        #         keys = tuple(data.dtype.names)
-        # elif ff['data'].startswith('dict'):
-        #     keys = tuple(data.keys())
-        # elif ff['data'] == 'listOfDicts':
-        #     keys = tuple(data[0].keys())
-
+        logger.info((data, ff))
         return data, ff
 
     @staticmethod
@@ -423,21 +416,25 @@ class DataFileIO():
         return rv
 
     @staticmethod
-    def detect_format(ff, filename):
+    def detect_format(filename):
+        logger.info(f"detect_format {filename}")
         file = open(filename)
+        ff = {'data': None, 'file': None, 'header': None, 'dialect': None}
 
         try:
             samplelines = DataFileIO.readnlines(file, 4)
         except UnicodeDecodeError as e:
             ff['file'] = 'numpy'
-            return
+            logger.info(ff)
+            return None, ff
 
         n_samplelines = len(samplelines)
 
         if n_samplelines in [0, 1]:
             if n_samplelines == 0 or samplelines[0].strip(' \t\n\r') == '':
                 ff['file'] = 'empty'
-                return []
+                logger.info(ff)
+                return [], ff
 
         if samplelines[0][0] in "[({":
             try:
@@ -504,24 +501,37 @@ class DataFileIO():
             ff['header'] = header
 
         if ff['file'] == 'oneLine':
-            return sample
-        return None
+            logger.info(sample)
+            return sample, ff
+        logger.info(None)
+        return None, ff
 
     @staticmethod
     def do_literal(ff, filename):
         file = open(filename)
 
         if ff['data'] == 'listOfLists':
-            data = ast.literal_eval(file.read())
-            data = list(map(lambda *a: list(a), *data))
+            if ff['file'] == 'multiLine':
+                try:
+                    data = [ast.literal_eval(l) for l in file.readlines()]
+                except SyntaxError:
+                    file.seek(0)
+                    data = ast.literal_eval(file.read())
+            elif ff['file'] == 'oneLine':
+                raise Exception("Should not be here")
+            else:
+                raise NotImplementedError
+
+            # data = ast.literal_eval(file.read())
+            # data = list(map(lambda *a: list(a), *data))
         elif ff['data'] == 'listOfDicts':
-            if ff['file']=='multiLine':
+            if ff['file'] == 'multiLine':
                 data = [ast.literal_eval(l) for l in file.readlines()]
             else:
                 raise NotImplementedError
         elif ff['data'] == 'listOfValues':
             data = [ast.literal_eval(l) for l in file.readlines()]
-            data = list(map(lambda *a: list(a), *data))  # transpose
+            # data = list(map(lambda *a: list(a), *data))  # transpose
         elif ff['data'] == 'dictOfLists':
             data = ast.literal_eval(file.read())
         elif ff['data'] == 'empty':
@@ -539,14 +549,14 @@ class DataFileIO():
             ff['data'] = 'save'
             ff['file'] = 'numpy'
         except ValueError:
-            kw = {'fname':filename, 'unpack':True}
+            kw = {'fname':filename}
             if ff['dialect']:
                 kw.update(delimiter=ff['dialect'].delimiter)
             if ff['header']:
                 kw.update(names=True)
-            data = np.genfromtxt(**kw, dtype=np.float)
+            data = np.genfromtxt(**kw)
             ff['data'] = 'text'
-            ff['file'] = 'numpy-csv'
+            ff['file'] = 'csv'
 
         if data.dtype.names is not None:
             ff['header'] = data.dtype.names
@@ -554,6 +564,6 @@ class DataFileIO():
                 ff['data'] += '-structuredarray'
 
         return data
-
+parse_file = DataFileIO.parse_file
 
 __all__ = ['DictArray', 'DataStream']
