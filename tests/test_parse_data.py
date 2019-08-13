@@ -9,88 +9,90 @@ TRACEBACK_FMT = 'File "%(pathname)s", line %(lineno)d:'
 # logging.basicConfig(stream=sys.stdout, filemode='w', level=logging.INFO, format='%(name)s:%(funcName)s:line %(lineno)d:%(message)s')
 logging.basicConfig(stream=sys.stdout, filemode='w', level=logging.DEBUG, format=TRACEBACK_FMT+'%(message)s')
 
-# test data
-dict1 = {'x': [], 'y': []}
-dict2 = {'x': 0.0, 'y': 1.0}
-dict3 = {'x': [0.0, 1.0], 'y': [2.0, 3.0]}
-point_test = namedtuple('point_test', 'x, y')
-ntup1 = point_test([], [])
-ntup2 = point_test(0.0, 1.0)
-ntup3 = point_test([0.0, 1.0], [2.0, 3.0])
-tup1 = ([], [])
-tup2 = (0.0, 1.0)
-tup3 = ([0.0, 2.0], [1.0, 3.0])
-nptup1 = (np.array([]), np.array([]))
-nptup2 = (np.array(1.0), np.array(1.0))
-nptup3 = (np.array([0.0, 2.0]), np.array([1.0, 3.0]))
-np1 = np.array([[],[]])
-np2 = np.array([0.0, 1.0])
-np3 = np.array([[0.,2.],[1.,3.]])
-list1 = [[], []]
-list2 = [0.0, 1.0]
-list3 = [[0.0, 2.0], [1.0, 3.0]]
-sarr1 = np.array(list1)
-sarr2 = np.array(list2)
-sarr3 = np.array(list3)
-
-VALUES1 = np.array([[],[]])
-VALUES2 = np.array([[0.0],[1.0]])
-VALUES3 = np.array([[0.0,2.0],[1.0,3.0]])
-KEYS = ('x', 'y')
-
 
 def test_dataType():
     logging.info('---------------Begin test_dataType()')
 
-    assert data_type(dict1) == 'dictOfLists'
-    assert data_type(dict2) == 'dictOfValues'
-    assert data_type(dict3) == 'dictOfLists'
+    # test data
+    KEYS = None  # default keys, when none are specified
+    DICTKEYS = ('a', 'b')  # keys for dict results (have `dict` in test case name)
+    RECARRAYKEYS = ('c', 'd')  # keys for structured ndarray results (have `rec` in test case name)
+    NAMEDTUPLEKEYS = ('Y', 'Z')  # keys for namedtuple results  (have `ntup` in test case name)
 
-    assert data_type(ntup1) == 'listOfLists'
-    assert data_type(ntup2) == 'listOfValues'
-    assert data_type(ntup3) == 'listOfLists'
+    VALUES = {  # test result values (append a VALUES key to end of each test case name)
+        '0': np.array([]),
+        '1': np.array([[], []]),  # (2,0)
+        '2': np.array([[0.0, 1.0]]),  # (1,2)
+        '3': np.array([[0.0, 1.0], [2.0, 3.0]]),  # (2,2)
+        '4': np.ndarray((0,2))  # (0,2) empty
+    }
 
-    assert data_type(tup1) == 'listOfLists'
-    assert data_type(tup2) == 'listOfValues'
-    assert data_type(tup3) == 'listOfLists'
+    point_test = namedtuple('point_test', 'Y, Z')  # test namedtuple
 
-    assert data_type(list1) == 'listOfLists'
-    assert data_type(list2) == 'listOfValues'
-    assert data_type(list3) == 'listOfLists'
+    list1 = [[], []]  # test lists
+    list2 = [0.0, 1.0]
+    list3 = [[0.0, 1.0], [2.0, 3.0]]  # first point: x=0, y=1; second point: x=2, y=3
 
-    assert data_type(nptup1) == 'listOfLists'
-    assert data_type(nptup2) == 'listOfLists'
-    assert data_type(nptup3) == 'listOfLists'
+    # groups of test cases (group name matches data_type() output)
+    empty = dict(empty0_0=dict(), empty1_0=(), empty2_0=[])
+    dictOfLists = dict(
+        dict4={'a': [], 'b': []},
+        dict3={'a': [0.0, 2.0], 'b': [1.0, 3.0]}
+    )
+    dictOfValues = dict(dict2={'a': 0.0, 'b': 1.0})
+    listOfLists = dict(
+        list1=list1,
+        list3=list3,
+        ntup3=point_test([0.0, 2.0], [1.0, 3.0]),
+        ntup4=point_test([], []),
+        tup1=tuple(list1),
+        tup3=tuple(list3),
+        nptup1=(np.array([]), np.array([])),
+        nptup3=(np.array([0.0, 1.0]), np.array([2.0, 3.0])),
+        ntuplist3=[point_test(0., 1.), point_test(2.,3.)],
+    )
+    listOfValues = dict(
+        list2=list2,
+        ntup2=point_test(*list2),
+        tup2=tuple(list2),
+        np2=np.array(list2),
+        arr2=np.array(tuple(list2)),
+        nptup2=(np.array(0.0), np.array(1.0))  # single element arrays are considered values
+    )
+    listOfDicts = dict(
+        lod2=[{'a': 0.0, 'b': 1.0}],
+        lod3=[{'a': 0.0, 'b': 1.0}, {'a': 2.0, 'b': 3.0}]
+    )
+    ndarray = dict(
+        np1=np.array(list1),
+        np3=np.array(list3),
+    )
+    recarray = dict(
+        recarr4=np.array([], dtype=[('c', float), ('d', float)]),
+        recarre_4=np.array([[]], dtype=[('c', float), ('d', float)]),
+        recarr1_4=np.array([[],[]], dtype=[('c', float), ('d', float)]),
+        recarr2=np.array([(0.0, 1.0)], dtype=[('c', float), ('d', float)]),
+        recarr3=np.array([(0.0, 1.0), (2.0, 3.0)], dtype=[('c', float), ('d', float)]),
+    )
 
+    for group in ['empty', 'dictOfLists', 'dictOfValues', 'listOfDicts', 'listOfLists', 'listOfValues', 'ndarray', 'recarray']:
+        for k,v in locals()[group].items():
+            logging.info(f"Testing {group} : {k} : {repr(v)}")
+            assert data_type(v) == group
 
-def test_parse_data():
-    logging.info('---------------Begin test_parse_data()')
+            vcheck = VALUES[k[-1]]
+            if group.lower().find('dict')!=-1:
+                kcheck = DICTKEYS
+            elif group.lower().find('rec')!=-1:
+                kcheck = RECARRAYKEYS
+            elif k.lower().find('ntup')!=-1:
+                kcheck = NAMEDTUPLEKEYS
+            else:
+                kcheck = KEYS
+            logging.info(f"kcheck={kcheck}, vcheck={repr(vcheck)}")
+            result = parse_data(v)
+            logging.info(f"result={result}")
+            assert np.array_equal(result[0], vcheck)
+            assert result[1] == kcheck
 
-    assert (parse_data(dict1) == VALUES1, KEYS)
-    assert (parse_data(dict2) == VALUES2, KEYS)
-    assert (parse_data(dict3) == VALUES3, KEYS)
-
-    assert (parse_data(ntup1) == VALUES1, KEYS)
-    assert (parse_data(ntup2) == VALUES2, KEYS)
-    assert (parse_data(ntup3) == VALUES3, KEYS)
-
-    assert (parse_data(tup1) == VALUES1, KEYS)
-    assert (parse_data(tup2) == VALUES2, KEYS)
-    assert (parse_data(tup3) == VALUES3, KEYS)
-
-    assert (parse_data(nptup1) == VALUES1, KEYS)
-    assert (parse_data(nptup2) == VALUES2, KEYS)
-    assert (parse_data(nptup3) == VALUES3, KEYS)
-
-    assert (parse_data(list1) == VALUES1, KEYS)
-    assert (parse_data(list2) == VALUES2, KEYS)
-    assert (parse_data(list3) == VALUES3, KEYS)
-
-    assert (parse_data(nptup1) == VALUES1, KEYS)
-    assert (parse_data(nptup2) == VALUES2, KEYS)
-    assert (parse_data(nptup3) == VALUES3, KEYS)
-
-    assert (parse_data(sarr1) == VALUES1, KEYS)
-    assert (parse_data(sarr2) == VALUES2, KEYS)
-    assert (parse_data(sarr3) == VALUES3, KEYS)
-
+    assert data_type(None) is None
