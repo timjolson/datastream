@@ -436,9 +436,11 @@ class DataFileIO():
         data, ff = DataFileIO.detect_format(filename)
 
         if data is not None:
+            logger.info((data, ff))
             return data, ff
 
         if ff['file'] == 'empty':
+            logger.info((data, ff))
             return data, ff
         elif ff['file'] == 'numpy':
             data = DataFileIO.do_numpy_csv(ff, filename)
@@ -446,9 +448,11 @@ class DataFileIO():
             try:
                 data = json.load(open(filename))
             except json.JSONDecodeError as e:
+                logger.info(f"Doing numpy {ff}")
                 data = DataFileIO.do_numpy_csv(ff, filename)
         elif ff['file'] == 'multiLine':
-            data = DataFileIO.do_literal(ff, filename)
+            logger.info(f"Doing multiLine {ff}")
+            data = DataFileIO.do_multiline_literal(ff, filename)
         else:
             raise NotImplementedError(ff)
 
@@ -489,12 +493,22 @@ class DataFileIO():
                 logger.info(ff)
                 return [], ff
 
+        logger.info('here')
         if samplelines[0][0] in "[({":
             try:
                 sample = ast.literal_eval(samplelines[0])
+                logger.info('here')
             except SyntaxError:
+                logger.info('here')
                 if samplelines[0][1] in "[({":
                     sample = ast.literal_eval(samplelines[0][1:])
+                    logger.info(f'sample {sample}')
+                else:
+                    file.seek(0)
+                    sample = ast.literal_eval(file.read())
+                    ff['file'] = 'multiLine'
+                    ff['data'] = data_type(sample)
+                    return sample, ff
             if isinstance(sample, dict):
                 ff['data']='dict'
                 itemsample = list(sample.values())[0]
@@ -528,67 +542,54 @@ class DataFileIO():
                 raise TypeError(type(sample), sample)
         else:
             samplestr = ''.join(samplelines)
-            dialect = None
-            header = None
-
+            logger.info(f'samplestr {samplestr}')
             try:
-                dialect = csv.Sniffer().sniff(samplestr)
+                ff['dialect'] = csv.Sniffer().sniff(samplestr)
+                logger.info(f"dialect {ff['dialect']}")
             except csv.Error:
+                logger.info(f'csv Error')
                 if n_samplelines > 1:
+                    logger.info(f"MORE THAN ONE LINE")
                     sample_without_header = ''.join(samplelines[1:])
                     try:
-                        dialect = csv.Sniffer().sniff(sample_without_header)
+                        ff['dialect'] = csv.Sniffer().sniff(sample_without_header)
                     except csv.Error:
                         pass
                     else:
-                        header = samplelines[0]
-            if dialect:
-                ff['dialect'] = dialect
-            if not header:
+                        ff['header'] = samplelines[0]
+            logger.info('CHECK HEADER')
+            if not ff['header']:
                 try:
                     hasheader = csv.Sniffer().has_header(samplestr)
                 except csv.Error:
+                    logger.info(f'DOES NOT HAVE HEADER')
                     pass
                 else:
-                    header = samplelines[0] if hasheader else None
-            ff['header'] = header
+                    logger.info(f'HAS HEADER {hasheader}')
+                    ff['header'] = samplelines[0] if hasheader else None
+
+        logger.info(ff)
 
         if ff['file'] == 'oneLine':
-            logger.info(sample)
+            logger.info((sample, ff))
             return sample, ff
-        logger.info(None)
+        logger.info((None, ff))
         return None, ff
 
     @staticmethod
-    def do_literal(ff, filename):
+    def do_multiline_literal(ff, filename):
+        logger.info(filename)
         file = open(filename)
 
-        if ff['data'] == 'listOfLists':
-            if ff['file'] == 'multiLine':
-                try:
-                    data = [ast.literal_eval(l) for l in file.readlines()]
-                except SyntaxError:
-                    file.seek(0)
-                    data = ast.literal_eval(file.read())
-            elif ff['file'] == 'oneLine':
-                raise Exception("Should not be here")
-            else:
-                raise NotImplementedError
-
-            # data = ast.literal_eval(file.read())
-            # data = list(map(lambda *a: list(a), *data))
-        elif ff['data'] == 'listOfDicts':
-            if ff['file'] == 'multiLine':
-                data = [ast.literal_eval(l) for l in file.readlines()]
-            else:
-                raise NotImplementedError
-        elif ff['data'] == 'listOfValues':
-            data = [ast.literal_eval(l) for l in file.readlines()]
-            # data = list(map(lambda *a: list(a), *data))  # transpose
-        elif ff['data'] == 'dictOfLists':
+        if ff['data'] in ['listOfLists', 'dictOfLists']:
             data = ast.literal_eval(file.read())
-        elif ff['data'] == 'empty':
-            data = []
+        elif ff['data'] in ['listOfDicts', 'listOfValues']:
+            data = [ast.literal_eval(l) for l in file.readlines()]
+        elif ff['data'] == 'unknown':
+            logger.info(f"Doing unknown {ff}")
+            data = ast.literal_eval(file.read())
+            ff['data'] = data_type(data)
+            logger.info(f"Doing unknown {ff}, {repr(data)}")
         else:
             raise NotImplementedError(ff)
 
@@ -596,9 +597,8 @@ class DataFileIO():
 
     @staticmethod
     def do_numpy_csv(ff, filename):
-        file = open(filename, 'rb')
         try:
-            data = np.load(file)
+            data = np.load(filename)
             ff['data'] = 'save'
             ff['file'] = 'numpy'
         except ValueError:

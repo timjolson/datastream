@@ -14,26 +14,28 @@ header = ('x', 'y', 'time')
 loadfileformats = {
     'csv':{'file':'csv', 'data':'text', 'header':None},
     'csv_with_header':{'file':'csv', 'data':'text', 'header':('x', 'y', 'time')},
-    'dict_of_lists':{'file':'oneLine', 'data':'dictOfLists', 'header':None},
+    'dict_of_lists_multiline':{'file':'multiLine', 'data':'dictOfLists', 'header':None},
+    'dict_of_lists_oneline':{'file':'oneLine', 'data':'dictOfLists', 'header':None},
     'empty':{'file':'empty', 'data':None, 'header':None},
     'json_dump_dict_of_lists':{'file':'oneLine', 'data':'dictOfLists', 'header':None},
     'json_dump_list_of_dicts':{'file':'oneLine', 'data':'listOfDicts', 'header':None},
     'json_dump_list_of_lists':{'file':'oneLine', 'data':'listOfLists', 'header':None},
-    'list_of_dicts':{'file':'oneLine', 'data':'listOfDicts', 'header':None},
-    'list_of_lists':{'file':'oneLine', 'data':'listOfLists', 'header':None},
-    'some_dicts':{'file':'multiLine', 'data':'listOfDicts', 'header':None},
-    'some_dicts_oneline':{'file':'oneLine', 'data':'listOfDicts', 'header':None},
-    'some_lists':{'file':'multiLine', 'data':'listOfValues', 'header':None},
-    'some_lists_oneline':{'file':'oneLine', 'data':'listOfLists', 'header':None},
+    'list_of_dicts_oneline':{'file':'oneLine', 'data':'listOfDicts', 'header':None},
     'list_of_lists_multiline':{'file':'multiLine', 'data':'listOfLists', 'header':None},
+    'list_of_lists_oneline':{'file':'oneLine', 'data':'listOfLists', 'header':None},
     'np_save_arr.npy':{'file':'numpy', 'data':'save', 'header':None},
+    'np_save_structuredarray.npy':{'file':'numpy', 'data':'save-structuredarray', 'header':('x', 'y', 'time')},
     'np_savetxt_arr':{'file':'csv', 'data':'text', 'header':None},
     'np_savetxt_arr_header':{'file':'csv', 'data':'text', 'header':('x', 'y', 'time')},
     'np_savetxt_arr_header_delim':{'file':'csv', 'data':'text', 'header':('x', 'y', 'time')},
-    'np_save_structuredarray.npy':{'file':'numpy', 'data':'save-structuredarray', 'header':('x', 'y', 'time')},
     'np_savetxt_structarr':{'file':'csv', 'data':'text', 'header':None},
     'np_savetxt_structarr_header':{'file':'csv', 'data':'text', 'header':('x', 'y', 'time')},
     'np_savetxt_structarr_header_delim':{'file':'csv', 'data':'text', 'header':('x', 'y', 'time')},
+    'some_dicts_multiline':{'file':'multiLine', 'data':'listOfDicts', 'header':None},
+    'some_dicts_oneline':{'file':'oneLine', 'data':'listOfDicts', 'header':None},
+    # 'some_lists_header':{'file':'multiLine', 'data':'listOfValues', 'header':('x', 'y', 'time')},
+    'some_lists_multiline':{'file':'multiLine', 'data':'listOfValues', 'header':None},
+    'some_lists_oneline':{'file':'oneLine', 'data':'listOfLists', 'header':None},
 }
 filenames = [os.path.join(data_set_dir,f) for f in loadfileformats]
 for f in list(loadfileformats.keys()):
@@ -47,7 +49,7 @@ KEYS = ('x', 'y', 'time')
 
 def test_parse_file():
     for f in filenames:
-        logging.debug(f"filename={f}")
+        logging.info(f"filename={f}")
         d, ff = parse_file(f)
         ff.pop('dialect', None)
         assert ff == loadfileformats[f]
