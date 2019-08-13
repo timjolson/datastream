@@ -271,47 +271,83 @@ class DataStream(DictArray):
                 self._init_file()
             self._recorder(point)
 
-
-def process_data(keys, data, **kwargs):
+def parse_data(data):
+    names = None  # keys to return
+    logger.info(f"parse_data {repr(data)}")
     dt = data_type(data)
-    if dt in (None, 'empty'):
-        return np.array([], **kwargs), ()
+    logger.info(f"dt={dt}")
+    if dt is None:
+        data = np.array([])
+        return data, names
+    elif dt == 'empty':
+        # if isinstance(data, np.ndarray):
+        #     if len(data.shape) > 0:
+        #         return data, names
+        return np.array([]), names
     elif dt == 'listOfLists':
-        sample = data[0]
-        if hasattr(data, '_fields'):  # namedtuple
-            names = data._fields
-        elif hasattr(sample, '_fields'):  # namedtuple
-            names = sample._fields
+        data_fields = data._fields if hasattr(data, '_fields') else None
+        sample_fields = data[0]._fields if hasattr(data[0], '_fields') else None
+        data = list(map(list, data))
+        names = data_fields or sample_fields or None
+        logger.info(f"listOfLists {repr(data)}")
+        if data_fields:  # lists are in named tuple
+            data = np.array(data).T
+            logger.info(f"listOfLists {repr(data)}")
+        elif sample_fields:  # lists are named tuples
+            logger.info(f"listOfLists SAMPLE")
         else:
-            names = keys or [_ascii_fields[i] for i in range(len(data))]
+            data = np.array(data)
+            logger.info(f"listOfLists {repr(data)}")
+        logger.info(f"listOfLists -> {repr(data)}")
+        return data, names
     elif dt == 'listOfDicts':
         sample = data[0]
         names = list(sample.keys())
-        vv = []
-        for k in sample.keys():  # curve names
-            pp = []  # data for curve
-            for p in data:  # each data point
-                pp.append(p[k])  # coordinate
-            vv.append(pp)  # data for curve
-        data = vv
+        vvv = []
+        for d in data:
+            vv = []
+            for i, (k, v) in enumerate(d.items()):  # order, name, values
+                vv.append(v)
+            vvv.append(vv)
+        data = vvv
+        return np.array(data), tuple(names)
     elif dt == 'listOfValues':
         if hasattr(data, '_fields'):  # namedtuple
             names = data._fields
-        else:
-            names = keys or [_ascii_fields[i] for i in range(len(data))]
-        data = [[d] for d in data]
+        # data = np.array([[v for v in data]])
+        data = np.array([[*data]])
+        return data, names
     elif dt == 'dictOfLists':
-        names, data = list(data.keys()), list(data.values())
+        names, data = tuple(data.keys()), list(map(lambda *a: list(a), *data.values()))  # transpose data
+        data = np.array(data)
+        logger.info(f'dictOfLists {names}, {repr(data)}')
+        if data.size == 0:
+            logger.info('make to size')
+            data.resize((0, len(names)))
+        return data, names
     elif dt == 'dictOfValues':
-        names, data = list(data.keys()), [[d] for d in data.values()]
+        names, data = tuple(data.keys()), [list(data.values())]
+        logger.info(f"dictOfValues {repr(data)}")
+        data = np.array(data)
+        logger.info(f"dictOfValues {repr(data)}")
+        return data, names
     elif dt == 'recarray':
         names = data.dtype.names
-        data = list(map(lambda *a: list(a), *data))
+        logger.info(f"recarray {repr(data)}")
+        if data.size == 0:
+            data = np.ndarray((0, len(names)))
+        else:
+            data = np.array(list(map(list, data)))  # get list version to remove dtype // np.void
+        logger.info(f"recarray {repr(data)}")
+        return data, names
     elif dt == 'ndarray':
-        names = keys or [_ascii_fields[i] for i in range(len(data))]
+        names = data.dtype.names
+        data = np.array(list(map(list, data)))  # get list version to remove dtype // np.void
+        return data, names
     elif dt == 'DictArray':
-        names = tuple(data._keys)
-        data = data.array.copy()
+        names = data._keys
+        data = data.array
+        return data, names
     else:
         raise NotImplementedError(f"Cannot handle '{dt}' {data}")
 
@@ -333,39 +369,56 @@ def process_data(keys, data, **kwargs):
 def data_type(obj):
     """Identify format of data object. Returns `str` or `None`"""
     # inspired by pyqtgraph.graphicsitems.PlotDataItem
+    logger.info(f"data_type {type(obj), repr(obj)}")
     if obj is None:
         return None
-    if hasattr(obj, '__len__') and len(obj) == 0:
-        return 'empty'
     if isinstance(obj, DictArray):
         return 'DictArray'
+    if hasattr(obj, '__len__'):
+        if isinstance(obj, np.ndarray):
+            pass
+        elif len(obj) == 0:
+            return 'empty'
     if isinstance(obj, dict):
         first = obj[list(obj.keys())[0]]
         if is_sequence(first):
             return 'dictOfLists'
         else:
             return 'dictOfValues'
-    elif is_sequence(obj):
-        first = obj[0]
-
-        if (hasattr(obj, 'implements') and obj.implements('MetaArray')):
-            return 'MetaArray'
-        elif isinstance(obj, np.ndarray):
-            if obj.ndim == 1:
+    if is_sequence(obj):
+        # if (hasattr(obj, 'implements') and obj.implements('MetaArray')):
+        #     return 'MetaArray'
+        # elif isinstance(obj, np.ndarray):
+        if isinstance(obj, np.ndarray):
+            if obj.ndim <= 1:
                 if obj.dtype.names is None:
                     return 'listOfValues'
-                else:
+                elif obj.dtype.names:
                     return 'recarray'
+                # else:
+                #     return 'empty'
             # elif obj.ndim == 2 and obj.dtype.names is None and obj.shape[1] == 2:
             #     return 'Nx2array'
             elif obj.ndim == 2:
-                return 'ndarray'
+                if obj.dtype.names is None:
+                    return 'ndarray'
+                else:
+                    return 'recarray'
             else:
-                raise Exception('array shape must be (N,) or (N,2); got %s instead' % str(obj.shape))
-        elif isinstance(first, dict):
+                raise Exception('array shape must be (N points, N keys); got %s instead' % str(obj.shape))
+
+        # try:
+        first = obj[0]
+        # except IndexError:
+        #     return 'empty'
+
+        if isinstance(first, dict):
             return 'listOfDicts'
         elif is_sequence(first):
-            return 'listOfLists'
+            if isinstance(first, np.ndarray) and first.ndim == 0:
+                return 'listOfValues'
+            else:
+                return 'listOfLists'
         else:
             return 'listOfValues'
 
