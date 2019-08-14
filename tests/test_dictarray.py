@@ -1,138 +1,115 @@
 import pytest
-import os
+import os, sys
 import logging
-from collections import namedtuple
 import numpy as np
-
 from datastream import DictArray, data_type
 
-logging.basicConfig(filename='logs/test_DictArray.log', filemode='w', level=logging.INFO)
+TRACEBACK_FMT = 'File "%(pathname)s", line %(lineno)d:'
+# logging.basicConfig(stream=sys.stdout, filemode='w', level=logging.INFO, format='%(funcName)s:line %(lineno)d:%(message)s')
+logging.basicConfig(stream=sys.stdout, filemode='w', level=logging.DEBUG, format=TRACEBACK_FMT+'%(message)s')
+# logging.basicConfig(filename='tests/logs/test_DictArray.log', filemode='w', level=logging.DEBUG, format=TRACEBACK_FMT+'%(message)s')
 
-# test data
-dict1 = {'x': [], 'y': []}
-dict2 = {'x': 1.0, 'y': 1.0}
-dict3 = {'x': [2.0, 3.0], 'y': [2.0, 3.0]}
-point_test = namedtuple('point_test', 'x, y')
-ntup1 = point_test([], [])
-ntup2 = point_test(1.0, 1.0)
-ntup3 = point_test([2.0, 3.0], [2.0, 3.0])
-tup1 = ([], [])
-tup2 = (1.0, 1.0)
-tup3 = ([2.0, 3.0], [2.0, 3.0])
-np1 = (np.array([]), np.array([]))
-np2 = (np.array(1.0), np.array(1.0))
-np3 = (np.array([2.0, 3.0]), np.array([2.0, 3.0]))
-VALUES1 = np.array([[],[]])
-VALUES2 = np.array([[1.0],[1.0]])
-VALUES3 = np.array([[2.0,3.0],[2.0,3.0]])
-KEYS = {'x', 'y'}
+
+from . import empty, dictOfLists, dictOfValues, listOfDicts, \
+    listOfLists, listOfValues, ndarray, recarray, VALUES, \
+    NAMEDTUPLEKEYS, RECARRAYKEYS, DICTKEYS, KEYS, groups
 
 
 def check_equal(one, two):
     logging.debug('check_equal')
     logging.debug(f"keys {one._keys, two._keys}")
-    logging.debug(f"points {one.array, two.array}")
 
     assert set(one._keys) == set(two._keys)
-    assert np.all(one.array == two.array)
+    assert np.array_equal(one.array, two.array)
+    assert np.array_equal(one, two)
 
 
 def test_base_constructor():
-    logging.debug('---------------Begin test_base_constructor()')
+    logging.info('---------------Begin test_base_constructor()')
     da = DictArray()
-
-    # kwargs passed to np.array
-    da = DictArray(dtype=np.float64)
-    assert da.dtype == np.float64
-
-
-def test_dataType():
-    logging.debug('---------------Begin test_dataType()')
-
-    assert data_type(dict1) == 'dictOfLists'
-    assert data_type(dict2) == 'dictOfValues'
-
-    assert data_type(ntup1) == 'listOfLists'
-    assert data_type(ntup2) == 'listOfValues'
-
-    assert data_type(tup1) == 'listOfLists'
-    assert data_type(tup2) == 'listOfValues'
-
-    assert data_type(np1) == 'listOfLists'
-    assert data_type(np2) == 'listOfLists'
-
-    assert data_type(DictArray()) == 'empty'
-    assert data_type(DictArray([])) == 'empty'
-    assert data_type(DictArray([[]])) == 'DictArray'
-    assert data_type(DictArray([[], [], []])) == 'DictArray'
-
-
-def test_constructor_point():
-    logging.debug('---------------Begin test_constructor_point()')
-
-    for data in [dict1, ntup1, tup1, np1]:
-        da = DictArray(data)
-        assert data_type(da) == 'DictArray'
-        assert np.all(da.array == VALUES1)
-        assert set(da.keys()) == KEYS
-
-    for data in [dict2, ntup2, tup2, np2]:
-        da = DictArray(data)
-        assert data_type(da) == 'DictArray'
-        assert np.all(da.array == VALUES2)
-        assert set(da.keys()) == KEYS
-
-
-def test_constructor_points():
-    logging.debug('---------------Begin test_constructor_points()')
-
-    for data in [dict3, ntup3, tup3, np3]:
-        da = DictArray(data)
-        assert data_type(da) == 'DictArray'
-        assert np.all(da.array == VALUES3)
-        assert set(da.keys()) == KEYS
-
-
-def test_array_read_ops():
-    logging.debug('---------------Begin test_array_read_ops()')
-    Dict = {'x': [1., 4.], 'y': [2., 5], 'z': [3, 6]}
-    da = DictArray(Dict)
-
-    # check by point
-    assert np.all(da[:,0] == [1., 2., 3])
-    assert np.all(da[:,1] == [4., 5., 6])
-
-    # check x
-    assert np.all(da['x'] == da['x',:])
-    assert np.all(da['x'] == da[0,:])
-    assert np.all(da['x'] == [1,4])
-    assert da['x',0] == 1 == da['x'][0]
-    assert da['x',1] == 4 == da['x'][1]
-
-    # check y
-    assert np.all(da['y'] == da['y',:])
-    assert np.all(da['y'] == da[1,:])
-    assert np.all(da['y'] == [2, 5])
-    assert da['y',0] == 2 == da['y'][0]
-    assert da['y',1] == 5 == da['y'][1]
-
-    #check z
-    assert np.all(da['z'] == da['z',:])
-    assert np.all(da['z'] == da[2,:])
-    assert np.all(da['z'] == [3, 6])
-    assert da['z',0] == 3 == da['z'][0]
-    assert da['z',1] == 6 == da['z'][1]
-
-    with pytest.raises(IndexError):
-        print(da[0,'z'])
-    with pytest.raises(IndexError):
-        print(da[:,'x'])
 
     check_equal(eval(repr(da), {}, {'DictArray':DictArray, 'array':np.array}), da)
 
 
+def test_data_type():
+    logging.info('---------------Begin test_data_type()')
+    assert data_type(DictArray()) == 'DictArray'
+    assert data_type(DictArray([])) == 'DictArray'
+    assert data_type(DictArray([[]])) == 'DictArray'
+    assert data_type(DictArray([[], []])) == 'DictArray'
+
+
+def test_constructor_data():
+    logging.info('---------------Begin test_constructor_data()')
+
+    for groupname, group in groups.items():
+        for dataname, data in group.items():
+            logging.info(f"Testing `{groupname}` : `{dataname}` : {repr(data)}")
+            ds = DictArray(data)
+
+            vcheck = VALUES[dataname[-1]]
+            if groupname.lower().find('dict') != -1:
+                kcheck = DICTKEYS
+            elif groupname.lower().find('rec') != -1:
+                kcheck = RECARRAYKEYS
+            elif dataname.lower().find('ntup') != -1:
+                kcheck = NAMEDTUPLEKEYS
+            elif dataname.lower().find('empty') != -1:
+                kcheck = ()
+            else:
+                kcheck = KEYS
+
+            # override for when using [] // [[]] // [[],[]]
+            if ds.ndim <= 1:
+                kcheck = ()
+            else:
+                if ds.shape[1] == 0:
+                    kcheck = ()
+
+            logging.info(f"kcheck={kcheck}, vcheck={vcheck}")
+            logging.info(f"result={ds._keys, ds.array}")
+            assert np.array_equal(ds.array, vcheck)
+            assert ds._keys == kcheck
+
+
+def test_array_read_ops():
+    logging.info('---------------Begin test_array_read_ops()')
+    Dict = {'x': [1., 4.], 'y': [2., 5], 'z': [3, 6]}
+    da = DictArray(Dict)
+
+    # check by point
+    assert np.all(da[0] == [1., 2., 3])
+    assert np.all(da[1] == [4., 5., 6])
+
+    # check x
+    assert np.all(da['x'] == da[:, 'x'])
+    assert np.all(da['x'] == da[:, 0])
+    assert np.all(da['x'] == [1,4])
+    assert da[0, 'x'] == 1 == da['x'][0]
+    assert da[1, 'x'] == 4 == da['x'][1]
+
+    # check y
+    assert np.all(da['y'] == da[:, 'y'])
+    assert np.all(da['y'] == da[:, 'y'])
+    assert np.all(da['y'] == [2, 5])
+    assert da[0,'y'] == 2 == da['y'][0]
+    assert da[1,'y'] == 5 == da['y'][1]
+
+    #check z
+    assert np.all(da['z'] == da[:,'z'])
+    assert np.all(da['z'] == da[:,2])
+    assert np.all(da['z'] == [3, 6])
+    assert da[0,'z'] == 3 == da['z'][0]
+    assert da[1,'z'] == 6 == da['z'][1]
+
+    with pytest.raises(TypeError):
+        print(da['z',0])
+    with pytest.raises(KeyError):
+        print(da['a'])
+
+
 def test_array_set_ops():
-    logging.debug('---------------Begin test_array_set_ops()')
+    logging.info('---------------Begin test_array_set_ops()')
     Dict = {'x': [1., 4.], 'y': [2., 5], 'z': [3, 6]}
     ds_constructed = DictArray(Dict)
 
@@ -144,25 +121,25 @@ def test_array_set_ops():
     da['y'] = Dict['y']
     assert np.all(ds_constructed['y'] == da['y'])
 
-    assert np.all(ds_constructed.array == da.array) == False  # 'is' doesn't want to work here
+    assert np.all(ds_constructed == da) == False  # 'is' doesn't want to work here
 
     da['z'] = Dict['z']
     assert np.all(ds_constructed['z'] == da['z'])
-    assert np.all(ds_constructed.array == da.array)
+    assert np.all(ds_constructed == da)
 
     # [key, :] =
     da = DictArray({'x':[0,0],'y':[0,0],'z':[0,0]})
-    da['x',:] = Dict['x']
+    da[:,'x'] = Dict['x']
     assert np.all(ds_constructed['x'] == da['x'])
 
-    da['y',:] = Dict['y']
+    da[:,'y'] = Dict['y']
     assert np.all(ds_constructed['y'] == da['y'])
 
-    assert np.all(ds_constructed.array == da.array) == False  # 'is' doesn't want to work here
+    assert np.all(ds_constructed == da) == False  # 'is' doesn't want to work here
 
-    da['z',:] = Dict['z']
+    da[:,'z'] = Dict['z']
     assert np.all(ds_constructed['z'] == da['z'])
-    assert np.all(ds_constructed.array == da.array)
+    assert np.all(ds_constructed == da)
 
     # [key][:] =
     da = DictArray({'x':[0,0],'y':[0,0],'z':[0,0]})
@@ -172,46 +149,42 @@ def test_array_set_ops():
     da['y'][:] = Dict['y']
     assert np.all(ds_constructed['y'] == da['y'])
 
-    assert np.all(ds_constructed.array == da.array) == False  # 'is' doesn't want to work here
+    assert np.all(ds_constructed == da) == False  # 'is' doesn't want to work here
 
     da['z'][:] = Dict['z']
     assert np.all(ds_constructed['z'] == da['z'])
-    assert np.all(ds_constructed.array == da.array)
+    assert np.all(ds_constructed == da)
 
 
 def test_getitem_multiple():
-    logging.debug('---------------Begin test_getitem_multiple()')
+    logging.info('---------------Begin test_getitem_multiple()')
     Dict = {'x': [1., 4.], 'y': [2., 5], 'z': [3, 6]}
 
     da = DictArray(Dict)
     logging.debug(da[['x','y']])
-    assert np.all(da[['x', 'y']] == np.vstack([da['x'], da['y']]))
+    assert np.all(da[['x', 'y']] == np.column_stack([da['x'], da['y']]))
 
-    with pytest.raises(IndexError):
-        da[0,('x', 'y')]
+    with pytest.raises(TypeError):
+        da[('x', 'y'), 0]
 
-    with pytest.raises(IndexError):
-        da[0,['x', 'y']]
-
-    with pytest.raises(IndexError):
-        da[('x', 'y')]
-
-    with pytest.raises(IndexError):
-        da[:, ('x', 'y')]
+    with pytest.raises(TypeError):
+        da[['x', 'y'], 0]
 
 
 def test_setitem_multiple():
-    logging.debug('---------------Begin test_setitem_multiple()')
+    logging.info('---------------Begin test_setitem_multiple()')
     Dict = {'x': [1., 4.], 'y': [2., 5], 'z': [3, 6]}
 
     da = DictArray(Dict)
-    replace = np.vstack([da['y'], da['x']]).copy()
+    replace = np.column_stack([da['y'], da['x']]).copy()
     da[['x', 'y']] = replace
+
+    assert np.all(da[['x', 'y']] == [[2.,1.],[5.,4.]])
     assert np.all(da[['x', 'y']] == replace)
 
 
 def test_object_keys():
-    logging.debug('---------------Begin test_object_keys()')
+    logging.info('---------------Begin test_object_keys()')
     class thing(object):
         pass
     x, y, z = thing(), thing(), thing()
@@ -219,34 +192,34 @@ def test_object_keys():
     da = DictArray(Dict)
 
     # check by point
-    assert np.all(da[:, 0] == [1., 2., 3])
-    assert np.all(da[:, 1] == [4., 5., 6])
+    assert np.all(da[0,:] == [1., 2., 3])
+    assert np.all(da[1,:] == [4., 5., 6])
 
     # check x
-    assert np.all(da[x] == da[x, :])
-    assert np.all(da[x] == da[0, :])
+    assert np.all(da[x] == da[:, x])
+    assert np.all(da[x] == da[:, 0])
     assert np.all(da[x] == [1, 4])
-    assert da[x, 0] == 1 == da[x][0]
-    assert da[x, 1] == 4 == da[x][1]
+    assert da[0, x] == 1 == da[x][0]
+    assert da[1, x] == 4 == da[x][1]
 
     # check y
-    assert np.all(da[y] == da[y, :])
-    assert np.all(da[y] == da[1, :])
+    assert np.all(da[y] == da[:, y])
+    assert np.all(da[y] == da[:, 1])
     assert np.all(da[y] == [2, 5])
-    assert da[y, 0] == 2 == da[y][0]
-    assert da[y, 1] == 5 == da[y][1]
+    assert da[0, y] == 2 == da[y][0]
+    assert da[1, y] == 5 == da[y][1]
 
     # check z
-    assert np.all(da[z] == da[z, :])
-    assert np.all(da[z] == da[2, :])
+    assert np.all(da[z] == da[:, z])
+    assert np.all(da[z] == da[:, 2])
     assert np.all(da[z] == [3, 6])
-    assert da[z, 0] == 3 == da[z][0]
-    assert da[z, 1] == 6 == da[z][1]
+    assert da[0, z] == 3 == da[z][0]
+    assert da[1, z] == 6 == da[z][1]
 
-    with pytest.raises(IndexError):
-        print(da[0, z])
-    with pytest.raises(IndexError):
-        print(da[:, x])
+    with pytest.raises(TypeError):
+        print(da[z, 0])
+    with pytest.raises(TypeError):
+        print(da[x, :])
 
     ds_constructed = DictArray(Dict)
 
@@ -258,27 +231,25 @@ def test_object_keys():
     da[y] = Dict[y]
     assert np.all(ds_constructed[y] == da[y])
 
-    assert np.all(ds_constructed.array == da.array) == False  # 'is' doesn't want to work here
+    assert np.all(ds_constructed == da) == False  # 'is' doesn't want to work here
 
     da[z] = Dict[z]
     assert np.all(ds_constructed[z] == da[z])
-    assert np.all(ds_constructed.array == da.array)
+    assert np.all(ds_constructed == da)
 
-    # [key, :] =
     da = DictArray({x: [0, 0], y: [0, 0], z: [0, 0]})
-    da[x, :] = Dict[x]
+    da[:, x] = Dict[x]
     assert np.all(ds_constructed[x] == da[x])
 
-    da[y, :] = Dict[y]
+    da[:, y] = Dict[y]
     assert np.all(ds_constructed[y] == da[y])
 
-    assert np.all(ds_constructed.array == da.array) == False  # 'is' doesn't want to work here
+    assert np.all(ds_constructed == da) == False  # 'is' doesn't want to work here
 
-    da[z, :] = Dict[z]
+    da[:, z] = Dict[z]
     assert np.all(ds_constructed[z] == da[z])
-    assert np.all(ds_constructed.array == da.array)
+    assert np.all(ds_constructed == da)
 
-    # [key][:] =
     da = DictArray({x: [0, 0], y: [0, 0], z: [0, 0]})
     da[x][:] = Dict[x]
     assert np.all(ds_constructed[x] == da[x])
@@ -286,9 +257,9 @@ def test_object_keys():
     da[y][:] = Dict[y]
     assert np.all(ds_constructed[y] == da[y])
 
-    assert np.all(ds_constructed.array == da.array) == False  # 'is' doesn't want to work here
+    assert np.all(ds_constructed == da) == False  # 'is' doesn't want to work here
 
     da[z][:] = Dict[z]
     assert np.all(ds_constructed[z] == da[z])
-    assert np.all(ds_constructed.array == da.array)
+    assert np.all(ds_constructed == da)
 

@@ -62,6 +62,6 @@ recarray = dict(
     recarr3=np.array([(0.0, 1.0), (2.0, 3.0)], dtype=[('c', float), ('d', float)]),
 )
 
-__all__ = ['KEYS', 'DICTKEYS', 'RECARRAYKEYS', 'NAMEDTUPLEKEYS', 'VALUES',
-           'empty', 'dictOfLists', 'dictOfValues', 'listOfLists', 'listOfValues',
-           'listOfDicts', 'ndarray', 'recarray']
+groups = {k:v for k,v in locals().items() if isinstance(v, dict)}
+list(map(groups.pop, (k for k,v in list(groups.items()) if k.startswith('_'))))
+groups.pop('VALUES')
