@@ -1,4 +1,5 @@
 import functools
+import numpy as np
 
 
 def lru_cache(maxsize=128, typed=False):
@@ -127,3 +128,141 @@ def _lru_cache_wrapper(user_function, maxsize, typed, _CacheInfo):
     wrapper.cache_info = cache_info
     wrapper.cache_clear = cache_clear
     return wrapper
+
+
+@lru_cache(128, typed=True)
+def contains_non_index(key):
+    if hasattr(key, '__iter__'):
+        if isinstance(key, str):
+            return True
+        return any(map(contains_non_index, key))
+    elif isinstance(key, slice):
+        return any(map(contains_non_index, (key.start, key.stop, key.step)))
+    else:
+        return not isinstance(key, (int, type(None), type(Ellipsis), slice))
+
+
+def do_slice(self, key):
+    start, stop, step = key.start, key.stop, key.step
+    step_shift = 1 if step is None else (1 if step > 0 else -1)
+    if contains_non_index(step):
+        raise TypeError("slice step must be an integer or None")
+    start = self._process_item_key(start)
+    if contains_non_index(stop):
+        stop = self._process_item_key(stop)
+    stop += step_shift
+    if stop < 0:
+        stop = None
+    return slice(start, stop, step)
+
+
+def remove_keys(self, keys):
+    for k in keys:
+        try:
+            self.default_keys.remove(k)
+        except ValueError:
+            pass
+
+
+def generate_keys(self, n):
+    keys = self.default_keys[:n]
+    remove_keys(self, keys)
+    return keys
+
+
+def finish_keys(self, keys):
+    self._keys = tuple(keys)
+    self._map_key_to_index = {k: i for i, k in enumerate(keys)}
+
+
+def is_sequence(obj):
+    # taken from pyqtgraph.graphicsitems.PlotDataItem
+    return hasattr(obj, '__iter__') or isinstance(obj, np.ndarray) or (
+            hasattr(obj, 'implements') and obj.implements('MetaArray'))
+
+
+class ROI():
+    def __init__(self, arr, shape=(), offset=()):
+        self.base = arr
+        self._shape = shape or arr.shape
+        self._offset = offset or (0,)*arr.ndim
+        self._update_view()
+
+    @property
+    def offset(self):
+        return self._offset
+
+    @offset.setter
+    def offset(self, s):
+        self.locate(s)
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @shape.setter
+    def shape(self, s):
+        self.reshape(s)
+
+    def reshape(self, newshape, *moreshape):
+        if newshape is None:
+            self.reshape(self.base.shape)
+            return self
+        if not newshape and newshape != 0:
+            raise TypeError("reshape() missing 1 required positional argument: 'newshape'")
+        if not hasattr(newshape, '__iter__'):
+            newshape = (newshape, *moreshape)
+        else:
+            newshape = (*newshape, *moreshape)
+        print('reshape', newshape)
+        self._shape = newshape
+        self._update_view()
+        return self
+
+    def locate(self, newoffset, *moreoffset):
+        if not newoffset and newoffset != 0:
+            raise TypeError("locate() missing 1 required positional argument: 'newoffset'")
+        if not hasattr(newoffset, '__iter__'):
+            newoffset = (newoffset, *moreoffset)
+        else:
+            newoffset = (*newoffset, *moreoffset)
+        self._offset = newoffset
+        self._update_view()
+        return self
+
+    def _update_view(self):
+        key = []
+        shape = self.shape
+        offset = self.offset
+        for i, d in enumerate(range(min(len(shape), self.base.ndim))):
+            key.append(self.wrap_slice(offset[i], offset[i]+shape[i], i))
+        key = np.meshgrid(*key,sparse=True,copy=False)
+        print('key', key)
+        self._view = self.base[tuple(key)].T
+        print('view', self._view)
+
+    def wrap_slice(self, start, stop, axis):
+        b = self.base
+        lim = b.shape[axis]
+        print('wrap_slice', start, stop, axis)
+        if start == stop:
+            indices = slice(0,0)
+        else:
+            indices = tuple(map(lambda n: n%lim, range(start, stop)))
+        print('indices', indices)
+        return indices
+
+    def __getitem__(self, k):
+        return self._view.__getitem__(k)
+
+    def __setitem__(self, k, v):
+        return self._view.__setitem__(k, v)
+
+    def __repr__(self):
+        return repr(self._view)
+
+    def __getattr__(self, k):
+        try:
+            return self.__dict__[k]
+        except KeyError:
+            return getattr(self._view, k)
