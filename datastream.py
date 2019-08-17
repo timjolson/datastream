@@ -7,7 +7,9 @@ import numpy as np
 import json
 import csv
 import ast
-from utils import lru_cache
+import utils
+from collections import OrderedDict
+
 _ascii_fields = string.ascii_letters[23:26] + string.ascii_letters[0:23]
 _ascii_fields = list(_ascii_fields.join([_ascii_fields, _ascii_fields.upper()]))
 logger = logging.getLogger(__name__)
@@ -28,7 +30,7 @@ class DictArray():
     .keys() ~= dict().keys()
     .items() ~= dict().items()
     .values() ~= dict().values()
-    .as_dict() returns dict version of .items()
+    .dict() returns dict version of .items()
 
     CAUTION: keys can be any valid dict key, except the types
         tuple/slice/list/int/np.ndarray that have no custom handling.
@@ -51,109 +53,171 @@ class DictArray():
 
     Written by Tim Olson - timjolson@user.noreplay.github.com
     """
-    default_keys = _ascii_fields
+    DictArray_default_keys = _ascii_fields
 
-    def __init__(self, data=None, rename=None):
-        logger.debug(f"__init__ {data}, rename={rename}")
-        self._ascii_fields = self.default_keys.copy()
+    def __init__(self, data=None, keys=None):
+        logger.debug(f"__init__ {data}, rename={keys}")
+        self.default_keys = self.DictArray_default_keys.copy()
         self._keys = ()
         self._map_key_to_index = dict()
-        if rename and not isinstance(rename, dict):
-            rename = {k: k for k in rename}
-        self.rename = rename
+        self._rename_dict = OrderedDict()
 
-        array, parse_keys = parse_data(data)
+        array, parse_keys = self.parse_data_with_keys(data)
         logger.debug(f"__init__ keys={parse_keys}, shape={array.shape}, ndim={array.ndim}, {repr(array)}")
 
-        if len(array.shape) > 1:  # data has width
-            if not parse_keys:  # does not have keys
-                parse_keys = self._ascii_fields[:array.shape[1]]
-                logger.debug(f"__init__ made keys {parse_keys}")
-        elif array.shape[0] == 0:  # no information
-            self.array = array
-            logger.debug(f"__init__ No Information")
-            return
+        extra_keys = OrderedDict()
+        final_keys = []
+        keys = keys or OrderedDict()
+        if parse_keys and keys:
+            logger.debug(f"renaming to {keys}")
+            if isinstance(keys, dict):
+                logger.debug(f"__init__ rename from dict")
+                rename_copy = OrderedDict(keys)
+                for p in parse_keys or list(rename_copy.keys()):
+                    logger.debug(f"__init__ renaming {p}->?")
+                    final_keys.append(rename_copy.pop(p, p))
+                extra_keys = rename_copy
+                logger.debug(f"__init__ rename={keys}, final_keys={final_keys}, extra_keys={extra_keys}")
+            else:
+                rename_dict = OrderedDict()
+                rename_copy = list(keys)
+                for i, p in enumerate(parse_keys or keys):
+                    rename_dict[p] = keys[i]
+                    rename_copy.remove(keys[i])
+                keys = rename_dict
+                final_keys = list(keys.values())
+                extra_keys = {k:k for k in rename_copy}
+                logger.debug(f"__init__ rename={keys}, final_keys={final_keys}, extra_keys={extra_keys}")
+        elif parse_keys and not keys:
+            logger.debug(f"builtin names")
+            final_keys = parse_keys
+        elif not parse_keys and keys:
+            logger.debug(f"specified names")
+            if isinstance(keys, dict):
+                extra_keys = keys.copy()
+                list(map(extra_keys.pop, list(keys.keys())))
+                final_keys = tuple(keys.values())
+            else:
+                final_keys = tuple(keys)
+                keys = OrderedDict((k, k) for k in keys)
+        else:  # no data keys and no _rename_dict
+            logger.debug(f"no keys at all")
+            pass
 
-        if not rename:  # no manual keys
-            final_keys = parse_keys  # use data's/generated keys
-        else:  # rename using `keys`
-            final_keys = []
-            self.rename = rename.copy()
-            for p in parse_keys:
-                if p in rename:
-                    p = rename.pop(p)
-                    final_keys.append(p)
+        # do extra_keys
+        if extra_keys:
+            array = np.column_stack([array, np.full([array.shape[0], len(extra_keys)], np.nan)])
+            keys.update(extra_keys)
+            final_keys = tuple([*final_keys, *extra_keys.values()])
 
         logger.debug(f"__init__ final keys {final_keys}")
-        remove_keys(self, final_keys)
-        finish_keys(self, final_keys)
+        utils.remove_keys(self, final_keys)  # update ascii list
+        utils.finish_keys(self, final_keys)  # store _keys and _map_key_to_index
         logger.debug(f"__init__ _keys {self._keys} -> {self._map_key_to_index}")
+        self._rename_dict.update(keys)
         self.array = array
 
-    # def extend(self, *data, **data_kw):
+    def parse_data_with_keys(self, data):
+        array, parse_keys = parse_data(data)
+        data_has_keys = bool(parse_keys) or len(array.shape) > 1
+        if data_has_keys and not parse_keys:  # make automatic names
+            parse_keys = self.default_keys[:array.shape[1]]
+        if self._rename_dict:  # generate new keys from _rename_dict
+            parse_keys = tuple(map(lambda k: self._rename_dict.get(k, k), parse_keys))
+        return array, parse_keys
+
+    def rename(self, input_key, new_access_key):
+        logger.info(f"rename {input_key}, {new_access_key}")
+        if new_access_key in self._rename_dict.values():
+            raise ValueError(f"Key `{new_access_key}` already assigned")
+        old_access_key = self._rename_dict.get(input_key, None)
+        logger.info(f"rename old_access_key = {old_access_key}")
+
+        def replace(oldkey, newkey, keys):
+            return list(k if k != oldkey else newkey for k in keys)
+
+        # if input_key in self._keys:
+        if old_access_key is None:
+            old_access_key = input_key
+            newkeys = replace(input_key, new_access_key, self._keys)
+        else:
+            newkeys = replace(old_access_key, new_access_key, self._keys)
+        logger.info(f"rename old_access_key = {old_access_key}, newkeys= {newkeys}")
+
+        if old_access_key in self.DictArray_default_keys:
+            logger.info(f"rename add old_access_key back into list")
+            self.default_keys.append(new_access_key)
+
+        if new_access_key not in newkeys:
+            newkeys = (*self._keys, new_access_key)
+            logger.info(f"rename extend keys {newkeys}")
+            # extend
+
+        self._rename_dict[input_key] = new_access_key
+
+        utils.remove_keys(self, new_access_key)
+        utils.finish_keys(self, newkeys)
+
+    # def extend(self, data_dict):
+    #     array, parse_keys = self.parse_data_with_keys(data_dict)
+    #     for k in parse_keys:
+    #         if k in self._keys:
+    #             raise ValueError(f"Key {k} already assigned")
+    #         self._rename_dict[k] = k
+    #     newkeys = (*self._keys, *self._rename_dict.keys())
+    #     utils.remove_keys(self, newkeys)
+    #     utils.finish_keys(self, newkeys)
+    #     # self.array
+
+    # def append(self, *data, **data_kw):
+    #     """Process and add data points
+    #
+    #     :param data: data in format supported by DictArray()
+    #     :param data_kw: keywords specifying data
+    #     :return: np.ndarray: the processed, appended data
+    #     """
     #     if not data and not data_kw:
-    #         raise ValueError("No point provided")
+    #         raise ValueError("No data provided")
     #     elif not data and data_kw:
     #         data = data_kw
     #     elif len(data) == 1:
     #         data = data[0]
     #
-    #     data, keys = self.parse_data(data, self.dtype)
+    #     data, keys = parse_data(data)
+    #     s = self.array.shape
+    #     if self.array.size == 0 and s[1] == 0:  # no data, no keys yet
+    #         if data.size > 0 or data.shape[1] > 0:  # new data not useless
+    #             self.array.resize(data.shape)
+    #             self.array[:] = data[:]
+    #             if keys:
+    #                 utils.remove_keys(self, keys)
+    #                 utils.finish_keys(self, keys)
+    #             else:
+    #                 utils.finish_keys(self, utils.generate_keys(self, data.shape[1]))
+    #     else:  # have keys set
+    #         if keys:  # new data has keys
+    #             if set(keys) == set(self._keys):  # keys are same
+    #                 if data.size == 0:  # no actual new data
+    #                     return data
+    #                 if keys == self._keys:  # keys are same, in same order
+    #                     if data.size == 0:  # no actual new data
+    #                         return data
+    #                     sdata = data  # set as sorted
+    #                 else:  # keys in different order
+    #                     keys = list(keys)  # so we can use .index
+    #                     sdata = np.ones_like(data)  # sorted data
+    #                     for i, k in enumerate(self._keys):  # sort incoming data columns
+    #                         sdata[:, i] = data[:][keys.index(k)]
     #
-    #     self._keys = (*self._keys, key)
-    #     self._map_key_to_index = {k: i for i, k in enumerate(self._keys)}
-    #     self.array.resize((self.shape[0]+1, self.shape[1]))
-    #     self[key][:] = np.nan
-    #     #TODO parse data, insert
+    #                 # actually append data
+    #                 self.array.resize(s[0] + sdata.shape[0], s[1])
+    #                 # self.array[s[0]:, :] = sdata[:]
+    #                 np.concatenate([self.array, data], 0, out=self.array)
+    #         else:
+    #             np.concatenate([self.array, data], 0, out=self.array)
+    #     return data
 
-    def append(self, *data, **data_kw):
-        """Process and add data points
-
-        :param data: data in format supported by DictArray()
-        :param data_kw: keywords specifying data
-        :return: np.ndarray: the processed, appended data
-        """
-        if not data and not data_kw:
-            raise ValueError("No data provided")
-        elif not data and data_kw:
-            data = data_kw
-        elif len(data) == 1:
-            data = data[0]
-
-        data, keys = parse_data(data)
-        s = self.array.shape
-        if self.array.size == 0 and s[1] == 0:  # no data, no keys yet
-            if data.size > 0 or data.shape[1] > 0:  # new data not useless
-                self.array.resize(data.shape)
-                self.array[:] = data[:]
-                if keys:
-                    remove_keys(self, keys)
-                    finish_keys(self, keys)
-                else:
-                    finish_keys(self, generate_keys(self, data.shape[1]))
-        else:  # have keys set
-            if keys:  # new data has keys
-                if set(keys) == set(self._keys):  # keys are same
-                    if data.size == 0:  # no actual new data
-                        return data
-                    if keys == self._keys:  # keys are same, in same order
-                        if data.size == 0:  # no actual new data
-                            return data
-                        sdata = data  # set as sorted
-                    else:  # keys in different order
-                        keys = list(keys)  # so we can use .index
-                        sdata = np.ones_like(data)  # sorted data
-                        for i, k in enumerate(self._keys):  # sort incoming data columns
-                            sdata[:, i] = data[:][keys.index(k)]
-
-                    # actually append data
-                    self.array.resize(s[0]+sdata.shape[0], s[1])
-                    # self.array[s[0]:, :] = sdata[:]
-                    np.concatenate([self.array, data], 0, out=self.array)
-            else:
-                np.concatenate([self.array, data], 0, out=self.array)
-        return data
-
+    # <editor-fold> convenience funcs
     def __getattr__(self, attr):
         try:
             return self.__dict__[attr]
@@ -175,18 +239,15 @@ class DictArray():
     def as_dict(self):
         return dict(self.items())
 
+    # </editor-fold>
+
+    # <editor-fold> getitem & setitem
     def _process_item_key(self, key, axis=0):
         # TODO: add float handling
-        if not contains_non_index(key):
+        if not utils.contains_non_index(key):
             return key
         if isinstance(key, slice):
-            start, stop, step = key.start, key.stop, key.step
-            if contains_non_index(step):
-                raise TypeError("slice step must be an integer or None")
-            start = self._process_item_key(start)
-            if contains_non_index(stop):
-                stop = self._process_item_key(stop)+1
-            return slice(start, stop, step)
+            return utils.do_slice(self, key)
         elif isinstance(key, tuple):
             return tuple(self._process_item_key(k, axis) for k in key)
         elif isinstance(key, list):
@@ -197,19 +258,13 @@ class DictArray():
     def __getitem__(self, key):
         # TODO: add float handling
         logger.info(f"getitem `{key}`")
-        if contains_non_index(key):
+        if utils.contains_non_index(key):
             if isinstance(key, tuple):  # ['x'] OK // NOT OK ['x', 0]
-                if contains_non_index(key[0]) and len(key) > 1:
+                if utils.contains_non_index(key[0]) and len(key) > 1:
                     raise TypeError(f"custom keys cannot be used on axis 0 while indexing other axes")
                 key = tuple(self._process_item_key(k, i) for i, k in enumerate(key))
             elif isinstance(key, slice):  # ['x':'z']  [0:'y']  ['x':2:1] OK // NOT OK [~:~:'x']
-                start, stop, step = key.start, key.stop, key.step
-                if contains_non_index(step):
-                    raise KeyError("custom keys cannot be used as a slice step")
-                start = self._process_item_key(start)
-                if contains_non_index(stop):
-                    stop = self._process_item_key(stop)+1
-                key = slice(None), slice(start, stop, step)
+                key = slice(None), utils.do_slice(self, key)
             else:
                 key = slice(None), self._process_item_key(key)
         return self.array[key]
@@ -217,28 +272,22 @@ class DictArray():
     def __setitem__(self, key, value):
         # TODO: add float handling
         logger.info(f"getitem `{key}`")
-        if contains_non_index(key):
+        if utils.contains_non_index(key):
             if isinstance(key, tuple):  # ['x'] OK // NOT OK ['x', 0]
-                if contains_non_index(key[0]) and len(key) > 1:
+                if utils.contains_non_index(key[0]) and len(key) > 1:
                     raise TypeError(f"custom keys cannot be used on axis 0 while indexing other axes")
                 key = tuple(self._process_item_key(k, i) for i, k in enumerate(key))
             elif isinstance(key, slice):  # ['x':'z']  [0:'y']  ['x':2:1] OK // NOT OK [~:~:'x']
-                start, stop, step = key.start, key.stop, key.step
-                if contains_non_index(step):
-                    raise KeyError("custom keys cannot be used as a slice step")
-                start = self._process_item_key(start)
-                if contains_non_index(stop):
-                    stop = self._process_item_key(stop) + 1
-                key = slice(None), slice(start, stop, step)
+                key = slice(None), utils.do_slice(self, key)
             else:
                 key = slice(None), self._process_item_key(key)
         return self.array.__setitem__(key, value)
 
+    # </editor-fold>
+
+    # <editor-fold> array delegation
     def __len__(self):
-        if hasattr(self, 'array'):
-            return self.array.__len__()
-        else:
-            return 0
+        return self.array.__len__()
 
     def __ge__(self, other):
         return self.array.__ge__(other)
@@ -260,10 +309,11 @@ class DictArray():
 
     def __repr__(self):
         if self.array.size > 0:
-            dd = {k: self.array[:,i] for i, k in enumerate(self._keys)}
+            dd = {k: self.array[:, i] for i, k in enumerate(self._keys)}
         else:
             dd = {k: [] for i, k in enumerate(self._keys)}
         return f"{type(self).__name__}({dd})"
+    # </editor-fold>
 
 
 class DataStream(DictArray):
@@ -379,18 +429,6 @@ class DataStream(DictArray):
         self._file_inited = True
 
 
-@lru_cache(128, typed=True)
-def contains_non_index(key):
-    if hasattr(key, '__iter__'):
-        if isinstance(key, str):
-            return True
-        return any(map(contains_non_index, key))
-    elif isinstance(key, slice):
-        return any(map(contains_non_index, (key.start, key.stop, key.step)))
-    else:
-        return not isinstance(key, (int, type(None), type(Ellipsis), slice))
-
-
 def parse_data(data):
     names = None  # keys to return
     logger.debug(f"parse_data `{repr(data)}`")
@@ -399,6 +437,7 @@ def parse_data(data):
     dt = data_type(data)
     logger.debug(f"dt={dt}")
     if dt == 'empty':
+        logger.info(f"DOING empty {repr(data)}")
         return np.array([]), names
     elif dt == 'listOfLists':
         data_fields = data._fields if hasattr(data, '_fields') else None
@@ -409,13 +448,8 @@ def parse_data(data):
         if data_fields:  # lists are in named tuple
             data = np.array(data).T
             logger.debug(f"listOfLists {repr(data)}")
-        elif sample_fields:  # lists are named tuples
-            logger.debug(f"listOfLists SAMPLE")
-            data = np.array(data)
-            names = sample_fields
         else:
             data = np.array(data)
-            logger.debug(f"listOfLists {repr(data)}")
         logger.debug(f"listOfLists -> {repr(data)}")
         return data, names
     elif dt == 'listOfDicts':
@@ -427,14 +461,11 @@ def parse_data(data):
             for i, (k, v) in enumerate(d.items()):  # order, name, values
                 vv.append(v)
             vvv.append(vv)
-        data = vvv
-        return np.array(data), tuple(names)
+        return np.array(vvv), tuple(names)
     elif dt == 'listOfValues':
         if hasattr(data, '_fields'):  # namedtuple
             names = data._fields
-        # data = np.array([[v for v in data]])
-        data = np.array([[*data]])
-        return data, names
+        return np.array([[*data]]), names
     elif dt == 'dictOfLists':
         names, data = tuple(data.keys()), list(map(lambda *a: list(a), *data.values()))  # transpose data
         data = np.array(data)
@@ -447,25 +478,20 @@ def parse_data(data):
         names, data = tuple(data.keys()), [list(data.values())]
         logger.debug(f"dictOfValues {repr(data)}")
         data = np.array(data)
-        logger.debug(f"dictOfValues {repr(data)}")
-        return data, names
+        return np.array(data), names
     elif dt == 'recarray':
         names = data.dtype.names
         logger.debug(f"recarray {repr(data)}")
         if data.size == 0:
             data = np.ndarray((0, len(names)))
         else:
-            data = np.array(list(map(list, data)))  # get list version to remove dtype // np.void
+            data = np.asanyarray(data.tolist())  # get list version to remove dtype // np.void
         logger.debug(f"recarray {repr(data)}")
         return data, names
     elif dt == 'ndarray':
-        names = data.dtype.names
-        data = np.array(list(map(list, data)))  # get list version to remove dtype // np.void
-        return data, names
+        return data.copy(), names
     elif dt == 'DictArray':
-        names = data._keys
-        data = data.array
-        return data, names
+        return data.array.copy(), data._keys
     else:
         raise NotImplementedError(f"Cannot handle '{dt}' {data}")
 
@@ -485,22 +511,19 @@ def data_type(obj):
             return 'empty'
     if isinstance(obj, dict):
         first = obj[list(obj.keys())[0]]
-        if is_sequence(first):
+        if utils.is_sequence(first):
             return 'dictOfLists'
         else:
             return 'dictOfValues'
-    if is_sequence(obj):
+    if utils.is_sequence(obj):
         # if (hasattr(obj, 'implements') and obj.implements('MetaArray')):
         #     return 'MetaArray'
-        # elif isinstance(obj, np.ndarray):
         if isinstance(obj, np.ndarray):
             if obj.ndim <= 1:
                 if obj.dtype.names is None:
                     return 'listOfValues'
                 elif obj.dtype.names:
                     return 'recarray'
-                # else:
-                #     return 'empty'
             # elif obj.ndim == 2 and obj.dtype.names is None and obj.shape[1] == 2:
             #     return 'Nx2array'
             elif obj.ndim == 2:
@@ -511,14 +534,11 @@ def data_type(obj):
             else:
                 raise Exception('array shape must be (N points, N keys); got %s instead' % str(obj.shape))
 
-        # try:
         first = obj[0]
-        # except IndexError:
-        #     return 'empty'
 
         if isinstance(first, dict):
             return 'listOfDicts'
-        elif is_sequence(first):
+        elif utils.is_sequence(first):
             if isinstance(first, np.ndarray) and first.ndim == 0:
                 return 'listOfValues'
             else:
@@ -526,31 +546,6 @@ def data_type(obj):
         else:
             return 'listOfValues'
     raise TypeError(f"Unknown data_type, {repr(obj)}")
-
-
-def remove_keys(self, keys):
-    for k in keys:
-        try:
-            self._ascii_fields.remove(k)
-        except ValueError:
-            pass
-
-
-def generate_keys(self, n):
-    keys = self._ascii_fields[:n]
-    remove_keys(self, keys)
-    return keys
-
-
-def finish_keys(self, keys):
-    self._keys = tuple(keys)
-    self._map_key_to_index = {k: i for i, k in enumerate(keys)}
-
-
-def is_sequence(obj):
-    # inspired by pyqtgraph.graphicsitems.PlotDataItem
-    return hasattr(obj, '__iter__') or isinstance(obj, np.ndarray) or (
-                hasattr(obj, 'implements') and obj.implements('MetaArray'))
 
 
 class DataFileIO():
@@ -634,29 +629,29 @@ class DataFileIO():
                     ff['data'] = data_type(sample)
                     return sample, ff
             if isinstance(sample, dict):
-                ff['data']='dict'
+                ff['data'] = 'dict'
                 itemsample = list(sample.values())[0]
-                if is_sequence(itemsample):
-                    ff['data']+='OfLists'
+                if utils.is_sequence(itemsample):
+                    ff['data'] += 'OfLists'
                 elif n_samplelines == 1:
-                    ff['data']+='OfValues'
+                    ff['data'] += 'OfValues'
                 else:
-                    ff['data']='listOfDicts'
+                    ff['data'] = 'listOfDicts'
 
                 if n_samplelines == 1:
                     ff['file'] = 'oneLine'
                 else:
                     ff['file'] = 'multiLine'
 
-            elif is_sequence(sample):
-                ff['data']='list'
+            elif utils.is_sequence(sample):
+                ff['data'] = 'list'
                 itemsample = sample[0]
                 if isinstance(itemsample, dict):
-                    ff['data']+='OfDicts'
-                elif is_sequence(itemsample):
-                    ff['data']+='OfLists'
+                    ff['data'] += 'OfDicts'
+                elif utils.is_sequence(itemsample):
+                    ff['data'] += 'OfLists'
                 else:
-                    ff['data']+='OfValues'
+                    ff['data'] += 'OfValues'
 
                 if n_samplelines == 1:
                     ff['file'] = 'oneLine'
@@ -726,7 +721,7 @@ class DataFileIO():
             ff['data'] = 'save'
             ff['file'] = 'numpy'
         except ValueError:
-            kw = {'fname':filename}
+            kw = {'fname': filename}
             if ff['dialect']:
                 kw.update(delimiter=ff['dialect'].delimiter)
             if ff['header']:
