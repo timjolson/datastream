@@ -17,7 +17,7 @@ def test_dataType():
         listOfLists, listOfValues, ndarray, recarray, VALUES, \
         NAMEDTUPLEKEYS, RECARRAYKEYS, DICTKEYS
 
-    KEYS = None
+    KEYS = ()
 
     for group in ['empty', 'dictOfLists', 'dictOfValues', 'listOfDicts', 'listOfLists', 'listOfValues', 'ndarray', 'recarray']:
         for k,v in locals()[group].items():
