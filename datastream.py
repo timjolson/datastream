@@ -430,20 +430,20 @@ class DataStream(DictArray):
 
 
 def parse_data(data):
-    names = None  # keys to return
+    names = ()  # keys to return
     logger.debug(f"parse_data `{repr(data)}`")
     if data is None:
-        return np.array([]), names
+        return np.array([]), names, 0
     dt = data_type(data)
     logger.debug(f"dt={dt}")
     if dt == 'empty':
         logger.info(f"DOING empty {repr(data)}")
-        return np.array([]), names
+        return np.array([]), names, 0
     elif dt == 'listOfLists':
         data_fields = data._fields if hasattr(data, '_fields') else None
         sample_fields = data[0]._fields if hasattr(data[0], '_fields') else None
         data = list(map(list, data))
-        names = data_fields or sample_fields or None
+        names = data_fields or sample_fields or ()
         logger.debug(f"listOfLists {repr(data)}")
         if data_fields:  # lists are in named tuple
             data = np.array(data).T
@@ -451,7 +451,7 @@ def parse_data(data):
         else:
             data = np.array(data)
         logger.debug(f"listOfLists -> {repr(data)}")
-        return data, names
+        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
     elif dt == 'listOfDicts':
         sample = data[0]
         names = list(sample.keys())
@@ -461,11 +461,13 @@ def parse_data(data):
             for i, (k, v) in enumerate(d.items()):  # order, name, values
                 vv.append(v)
             vvv.append(vv)
-        return np.array(vvv), tuple(names)
+        data = np.array(vvv)
+        return data, tuple(names), len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
     elif dt == 'listOfValues':
         if hasattr(data, '_fields'):  # namedtuple
             names = data._fields
-        return np.array([[*data]]), names
+        data = np.array([[*data]])
+        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
     elif dt == 'dictOfLists':
         names, data = tuple(data.keys()), list(map(lambda *a: list(a), *data.values()))  # transpose data
         data = np.array(data)
@@ -473,12 +475,13 @@ def parse_data(data):
         if data.size == 0:
             logger.debug('make to size')
             data.resize((0, len(names)))
-        return data, names
+        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
     elif dt == 'dictOfValues':
         names, data = tuple(data.keys()), [list(data.values())]
         logger.debug(f"dictOfValues {repr(data)}")
         data = np.array(data)
-        return np.array(data), names
+        logger.debug(f"dictOfValues {repr(data)}")
+        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
     elif dt == 'recarray':
         names = data.dtype.names
         logger.debug(f"recarray {repr(data)}")
@@ -487,11 +490,11 @@ def parse_data(data):
         else:
             data = np.asanyarray(data.tolist())  # get list version to remove dtype // np.void
         logger.debug(f"recarray {repr(data)}")
-        return data, names
+        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
     elif dt == 'ndarray':
-        return data.copy(), names
+        return data.copy(), names, data.shape[1]
     elif dt == 'DictArray':
-        return data.array.copy(), data._keys
+        return data.array.copy(), data._keys, len(data._keys)
     else:
         raise NotImplementedError(f"Cannot handle '{dt}' {data}")
 
