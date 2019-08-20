@@ -112,40 +112,13 @@ class DictArray():
         self._keys = tuple(rnd.values())
         logger.info(f"after init keys {self._keys}, {repr(self.array)}, {self.default_keys}")
 
-    def parse_data_with_keys(self, *data, **data_kw):
-        logger.info(f'parse_data_with_keys {data}, {data_kw}')
-        if not data and not data_kw:
-            raise ValueError("No data provided")
-        elif not data and data_kw:
-            data = data_kw
-        elif len(data) == 1:
-            data = data[0]
-
-        array, parse_keys, nkeys = parse_data(data)
-
-        if parse_keys and self._rename_dict:  # take keys and rename them
-            logger.info(f'parse_data_with_keys renaming')
-            parse_keys = tuple(map(lambda k: self._rename_dict.get(k, k), parse_keys))
-        elif self._rename_dict:
-            logger.info(f'parse_data_with_keys looking up')
-            parse_keys = []
-            len_keys = len(self._keys)
-            new = 0
-            for i in range(nkeys):
-                if i < len_keys:
-                    result = self._keys[i]
-                else:
-                    result = self.default_keys[new]
-                    new += 1
-                parse_keys.append(result)
-        elif nkeys and not parse_keys:  # make automatic names
-            logger.info(f'parse_data_with_keys generating {nkeys} from {self.default_keys}')
-            parse_keys = self.default_keys[:nkeys]
-        logger.info(f'parse_data_with_keys {repr(array)}, {parse_keys}')
-
-        return array, parse_keys
-
     def rename(self, input_key, new_access_key):
+        """Rename an incoming data key to index it by another key
+
+        :param input_key: key for incoming data
+        :param new_access_key: new key to use for indexing
+        :return:
+        """
         logger.info(f"rename {input_key}, {new_access_key}")
         if new_access_key in self._rename_dict.values():
             raise ValueError(f"Key `{new_access_key}` already assigned")
@@ -153,8 +126,9 @@ class DictArray():
         logger.info(f"rename old_access_key = {old_access_key}")
 
         if old_access_key is None:
-            old_access_key = input_key
-            self.array = np.column_stack([self.array, np.full([self.array.shape[0], 1], np.nan)])
+            self.extend({input_key:np.full([self.array.shape[0]], np.nan)})
+            self.rename(input_key, new_access_key)
+            return
 
         if old_access_key in self.DictArray_default_keys:
             logger.info(f're-add {old_access_key}')
@@ -167,6 +141,12 @@ class DictArray():
         self._keys = tuple(self._rename_dict.values())
 
     def extend(self, *data, **data_kw):
+        """Process and add data points as columns//new keys
+
+        :param data: data in format supported by DictArray()
+        :param data_kw: keywords specifying data
+        :return:
+        """
         logger.info(f'extend {data}, {data_kw}')
         if not data and not data_kw:
             raise ValueError("No data provided")
@@ -225,7 +205,7 @@ class DictArray():
             data = data_kw
         elif len(data) == 1:
             data = data[0]
-        data, parse_keys = self.parse_data_with_keys(data)
+        data, parse_keys = _parse_data_apply_keys(self, data)
         logger.info(f"append parse {repr(data)}, {parse_keys}")
         if not parse_keys:
             return data
@@ -302,20 +282,6 @@ class DictArray():
     # </editor-fold>
 
     # <editor-fold> getitem & setitem
-    def _process_item_key(self, key, axis=0):
-        # TODO: add float handling
-        if not utils.contains_non_index(key):
-            return key
-        if isinstance(key, slice):
-            return utils.do_slice(self, key)
-        elif isinstance(key, tuple):
-            return tuple(self._process_item_key(k, axis) for k in key)
-        elif isinstance(key, list):
-            return list(self._process_item_key(k, axis) for k in key)
-        else:
-            try: return self._keys.index(key)
-            except ValueError: raise KeyError(repr(key))
-
     def __getitem__(self, key):
         # TODO: add float handling
         logger.info(f"getitem `{key}`")
@@ -323,11 +289,11 @@ class DictArray():
             if isinstance(key, tuple):  # ['x'] OK // NOT OK ['x', 0]
                 if utils.contains_non_index(key[0]) and len(key) > 1:
                     raise TypeError("Keys cannot be used on axis 0 while indexing other axes")
-                key = tuple(self._process_item_key(k, i) for i, k in enumerate(key))
+                key = tuple(utils.process_getitem_key(self, k, i) for i, k in enumerate(key))
             elif isinstance(key, slice):  # ['x':'z']  [0:'y']  ['x':2:1] OK // NOT OK [~:~:'x']
-                key = slice(None), utils.do_slice(self, key)
+                key = slice(None), utils.do_keyed_slice(self, key)
             else:
-                key = slice(None), self._process_item_key(key)
+                key = slice(None), utils.process_getitem_key(self, key)
         return self.array[key]
 
     def __setitem__(self, key, value):
@@ -337,11 +303,11 @@ class DictArray():
             if isinstance(key, tuple):  # ['x'] OK // NOT OK ['x', 0]
                 if utils.contains_non_index(key[0]) and len(key) > 1:
                     raise TypeError("Keys cannot be used on axis 0 while indexing other axes")
-                key = tuple(self._process_item_key(k, i) for i, k in enumerate(key))
+                key = tuple(utils.process_getitem_key(self, k, i) for i, k in enumerate(key))
             elif isinstance(key, slice):  # ['x':'z']  [0:'y']  ['x':2:1] OK // NOT OK [~:~:'x']
-                key = slice(None), utils.do_slice(self, key)
+                key = slice(None), utils.do_keyed_slice(self, key)
             else:
-                key = slice(None), self._process_item_key(key)
+                key = slice(None), utils.process_getitem_key(self, key)
         return self.array.__setitem__(key, value)
 
     # </editor-fold>
@@ -616,6 +582,40 @@ def data_type(obj):
         else:
             return 'listOfValues'
     raise TypeError(f"Unknown data_type, {repr(obj)}")
+
+
+def _parse_data_apply_keys(self, *data, **data_kw):
+    logger.info(f'_parse_data_apply_keys {data}, {data_kw}')
+    if not data and not data_kw:
+        raise ValueError("No data provided")
+    elif not data and data_kw:
+        data = data_kw
+    elif len(data) == 1:
+        data = data[0]
+
+    array, parse_keys, nkeys = parse_data(data)
+
+    if parse_keys and self._rename_dict:  # take keys and rename them
+        logger.info(f'_parse_data_apply_keys renaming')
+        parse_keys = tuple(map(lambda k: self._rename_dict.get(k, k), parse_keys))
+    elif self._rename_dict:
+        logger.info(f'_parse_data_apply_keys looking up')
+        parse_keys = []
+        len_keys = len(self._keys)
+        new = 0
+        for i in range(nkeys):
+            if i < len_keys:
+                result = self._keys[i]
+            else:
+                result = self.default_keys[new]
+                new += 1
+            parse_keys.append(result)
+    elif nkeys and not parse_keys:  # make automatic names
+        logger.info(f'_parse_data_apply_keys generating {nkeys} from {self.default_keys}')
+        parse_keys = self.default_keys[:nkeys]
+    logger.info(f'_parse_data_apply_keys {repr(array)}, {parse_keys}')
+
+    return array, parse_keys
 
 
 class DataFileIO():

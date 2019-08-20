@@ -142,18 +142,33 @@ def contains_non_index(key):
         return not isinstance(key, (int, type(None), type(Ellipsis), slice))
 
 
-def do_slice(self, key):
+def do_keyed_slice(self, key):
     start, stop, step = key.start, key.stop, key.step
     if contains_non_index(step):
         raise TypeError("slice step must be an integer or None")
     step_shift = 1 if step is None else (1 if step > 0 else -1)
-    start = self._process_item_key(start)
+    start = process_getitem_key(self, start)
     if contains_non_index(stop):
-        stop = self._process_item_key(stop)
+        stop = process_getitem_key(self, stop)
     stop += step_shift
     if stop < 0:
         stop = None
     return slice(start, stop, step)
+
+
+def process_getitem_key(self, key, axis=0):
+    # TODO: add float handling
+    if not contains_non_index(key):
+        return key
+    if isinstance(key, slice):
+        return do_keyed_slice(self, key)
+    elif isinstance(key, tuple):
+        return tuple(process_getitem_key(self, k, axis) for k in key)
+    elif isinstance(key, list):
+        return list(process_getitem_key(self, k, axis) for k in key)
+    else:
+        try: return self._keys.index(key)
+        except ValueError: raise KeyError(repr(key))
 
 
 def is_sequence(obj):
