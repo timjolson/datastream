@@ -9,10 +9,10 @@ NAMEDTUPLEKEYS = ('Y', 'Z')  # keys for namedtuple results  (have `ntup` in test
 
 VALUES = {  # test result values (append a VALUES key to end of each test case name)
     '0': np.array([]),
-    '1': np.array([[], []]),  # (2,0)
-    '2': np.array([[0.0, 1.0]]),  # (1,2)
-    '3': np.array([[0.0, 1.0], [2.0, 3.0]]),  # (2,2)
-    '4': np.ndarray((0,2))  # (0,2) empty
+    '1': np.array([[], []]),
+    '2': np.array([[0.0, 1.0]]),
+    '3': np.array([[0.0, 1.0], [2.0, 3.0]]),
+    '4': np.ndarray((0,2))
 }
 
 point_test = namedtuple('point_test', 'Y, Z')  # test namedtuple
