@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 class DictArray():
-    """Wrapper around np.ndarray that allows key indexing in getitem/setitem.
+    """Wrapper around np.ndarray that allows key indexing (like dict of arrays) and
+            indexing/slicing in getitem/setitem.
 
     NOTE: Because the keys are used as indices, they must be HASHABLE and CANNOT be:
             iterable, tuple, list, int, slice, numpy.array
@@ -81,35 +82,33 @@ class DictArray():
         if data is not None:
             self.extend(data)
 
-        if not keys:
-            # logger.info(f"after init keys {self._keys}, {repr(self.array)}, {self.default_keys}")
-            logger.info(f"after init keys {self._keys}, {repr(self.array)}")
+        if keys is None:
             return
 
+        # keys are specified
         extra_keys = OrderedDict()
-        if not isinstance(keys, dict):
+        if not isinstance(keys, dict):  # iterable, use in order
             if len(keys) < len(self._keys):
                 raise ValueError(f"At least ({len(self._keys)}) keys are needed, provided ({len(keys)})")
-
-            for i, k in enumerate(keys):
+            new = 0
+            for i, k in enumerate(keys):  # handle renaming, spare keys
                 if i < len(self._keys):
                     rnd[self._keys[i]] = k
                 else:
-                    extra_keys[self.default_keys[i]] = k
+                    extra_keys[self.default_keys[new]] = k
+                    new += 1
         else:
-            for k, v in keys.items():
-                if k not in self._keys:
+            for k, v in keys.items():  # handle renaming, spare keys
+                if k not in rnd.keys():
                     extra_keys[k] = v
                 else:
                     self.rename(k, v)
-        if extra_keys:
-            logger.info(f'have extra keys {extra_keys}')
-            self.extend(OrderedDict([(v,[np.nan]*self.array.shape[0]) for v in extra_keys.values()]))
 
-        for k in rnd.values():
-            try: self.default_keys.remove(k)
-            except ValueError: pass
-        self._keys = tuple(rnd.values())
+        if extra_keys:  # extend data for spare keys
+            logger.info(f'have extra keys {extra_keys}')
+            self.extend(OrderedDict([(v,np.full(self.array.shape[0], np.nan)) for v in extra_keys.values()]))
+
+        self._keys = tuple(rnd.values())  # update _keys for indexing, iterating
         logger.info(f"after init keys {self._keys}, {repr(self.array)}, {self.default_keys}")
 
     def rename(self, input_key, new_access_key):
@@ -141,53 +140,37 @@ class DictArray():
         self._keys = tuple(self._rename_dict.values())
 
     def extend(self, *data, **data_kw):
-        """Process and add data points as columns//new keys
+        """Process and add data points as columns/new keys
 
         :param data: data in format supported by DictArray()
         :param data_kw: keywords specifying data
         :return:
         """
         logger.info(f'extend {data}, {data_kw}')
-        if not data and not data_kw:
-            raise ValueError("No data provided")
-        elif not data and data_kw:
+        if not data and data_kw:
             data = data_kw
         elif len(data) == 1:
             data = data[0]
         array, parse_keys, nkeys = parse_data(data)
+
         if not nkeys:  # new data is useless
             return
-        if nkeys and not parse_keys:
+        if nkeys and not parse_keys:  # auto-generate keys
             parse_keys = self.default_keys[:nkeys]
 
         for k in parse_keys:  # update rename dict with new keys
             if k in self._keys:
                 raise ValueError(f"Key {k} already assigned")
             self._rename_dict[k] = k
-        for k in self._rename_dict.values():
+        for k in self._rename_dict.values():  # update default_keys list
             try: self.default_keys.remove(k)
             except ValueError: pass
-        self._keys = tuple(self._rename_dict.values())
+        self._keys = tuple(self._rename_dict.values())  # update self._keys
 
         if self.array.ndim == 2:  # current data has keys
             if array.shape[0] != self.array.shape[0]:  # check shape of new data
                 raise ValueError(f"New data shape ({array.shape[0]}) does not match existing ({self.array.shape[0]})")
-
-            if array.size:  # new data points
-                if self.array.size:  # current data not empty
-                    logger.info('stacking')
-                    self.array = np.column_stack([self.array, array])
-                elif self.array.ndim == 2:  # current data empty but has shape
-                    logger.info('reshaping')
-                    self.array.resize(self.array.shape[0], self.array.shape[1]+array.shape[1])
-                else:  # current data empty, no helpful shape  # should be caught by `parse_keys` above
-                    raise Exception
-            else:  # no new data points
-                if self.array.ndim == 2:  # current data empty but has shape
-                    logger.info('reshaping')
-                    self.array.resize(self.array.shape[0], self.array.shape[1] + array.shape[1])
-                else:  # current data empty, no helpful shape
-                    self.array = array
+            self.array = np.column_stack([self.array, array])
         else:
             self.array = array
 
@@ -199,16 +182,12 @@ class DictArray():
         :return: np.ndarray: the processed, appended data
         """
         logger.info(f"append {data}, {data_kw}")
-        if not data and not data_kw:
-            raise ValueError("No data provided")
-        elif not data and data_kw:
+        if not data and data_kw:
             data = data_kw
         elif len(data) == 1:
             data = data[0]
         data, parse_keys = _parse_data_apply_keys(self, data)
         logger.info(f"append parse {repr(data)}, {parse_keys}")
-        if not parse_keys:
-            return data
 
         s = self.array.shape
         if self.array.size == 0 and self.array.ndim <= 1:  # no current data, no keys yet
@@ -227,8 +206,6 @@ class DictArray():
         # have keys already set
         if parse_keys == self._keys:  # keys are same, in same order
             logger.info(f"append same keys")
-            if data.size == 0:  # no actual new data
-                return data
             new_data = data  # set as sorted
             keys = parse_keys
         else:  # not same keys or different order
@@ -265,20 +242,23 @@ class DictArray():
 
     # <editor-fold> convenience funcs
     def keys(self):
+        """Generator of keys ~= dict.keys()"""
         for k in self._keys:
             yield k
 
     def items(self):
+        """Generator of key,value ~= dict.items()"""
         for k in self.keys():
             yield k, self[k]
 
     def values(self):
+        """Generator of values ~= dict.values()"""
         for k in self.keys():
             yield self[k]
 
     def dict(self):
+        """Get as dict of arrays"""
         return dict(self.items())
-
     # </editor-fold>
 
     # <editor-fold> getitem & setitem
@@ -309,7 +289,6 @@ class DictArray():
             else:
                 key = slice(None), utils.process_getitem_key(self, key)
         return self.array.__setitem__(key, value)
-
     # </editor-fold>
 
     # <editor-fold> array delegation
@@ -581,16 +560,12 @@ def data_type(obj):
                 return 'listOfLists'
         else:
             return 'listOfValues'
-    raise TypeError(f"Unknown data_type, {repr(obj)}")
+    raise NotImplementedError(f"Unknown data_type, {repr(obj)}")
 
 
 def _parse_data_apply_keys(self, *data, **data_kw):
     logger.info(f'_parse_data_apply_keys {data}, {data_kw}')
-    if not data and not data_kw:
-        raise ValueError("No data provided")
-    elif not data and data_kw:
-        data = data_kw
-    elif len(data) == 1:
+    if len(data) == 1:
         data = data[0]
 
     array, parse_keys, nkeys = parse_data(data)
