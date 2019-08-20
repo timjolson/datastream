@@ -156,25 +156,6 @@ def do_slice(self, key):
     return slice(start, stop, step)
 
 
-def remove_keys(self, keys):
-    for k in keys:
-        try:
-            self.default_keys.remove(k)
-        except ValueError:
-            pass
-
-
-def generate_keys(self, n):
-    keys = self.default_keys[:n]
-    remove_keys(self, keys)
-    return keys
-
-
-def finish_keys(self, keys):
-    self._keys = tuple(keys)
-    self._map_key_to_index = {k: i for i, k in enumerate(keys)}
-
-
 def is_sequence(obj):
     # taken from pyqtgraph.graphicsitems.PlotDataItem
     return hasattr(obj, '__iter__') or isinstance(obj, np.ndarray) or (
@@ -202,19 +183,19 @@ class ROI():
 
     @shape.setter
     def shape(self, s):
-        self.reshape(s)
+        self.resize(s)
 
-    def reshape(self, newshape, *moreshape):
+    def resize(self, newshape, *moreshape):
         if newshape is None:
-            self.reshape(self.base.shape)
+            self.resize(self.base.shape)
             return self
         if not newshape and newshape != 0:
-            raise TypeError("reshape() missing 1 required positional argument: 'newshape'")
+            raise TypeError("resize() missing 1 required positional argument: 'newshape'")
         if not hasattr(newshape, '__iter__'):
             newshape = (newshape, *moreshape)
         else:
             newshape = (*newshape, *moreshape)
-        print('reshape', newshape)
+        print('resize', newshape)
         self._shape = newshape
         self._update_view()
         return self
