@@ -144,9 +144,9 @@ def contains_non_index(key):
 
 def do_slice(self, key):
     start, stop, step = key.start, key.stop, key.step
-    step_shift = 1 if step is None else (1 if step > 0 else -1)
     if contains_non_index(step):
         raise TypeError("slice step must be an integer or None")
+    step_shift = 1 if step is None else (1 if step > 0 else -1)
     start = self._process_item_key(start)
     if contains_non_index(stop):
         stop = self._process_item_key(stop)
