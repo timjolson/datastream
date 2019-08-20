@@ -497,3 +497,60 @@ def test_append_extend():
     assert da._keys == ('x', 'y', 'a')
     assert da._rename_dict == OrderedDict(x='x', y='y', z='a')
     assert np.allclose(da.array, [[1,2,np.nan],[4,5,6]], equal_nan=True)
+
+
+def test_indexing_slicing():
+    logging.debug('---------------Begin test_indexing_slicing()')
+    da = DictArray([[0, 1, 2], [3, 4, 5], [6, 7, 8]])
+
+    keys = [
+        ((  'x'                     ),          [0, 3, 6]),
+        ((  1, 'x'                  ),          3),
+        ((  [1, 1]                  ),          [[3, 4, 5], [3, 4, 5]]),
+        ((  [0, -1]                 ),          [[0, 1, 2], [6, 7, 8]]),
+        ((  (0, -1)                 ),          2),
+        ((  [0, -1], ['x']          ),          [0, 6]),
+        ((  ['x', 1]                ),          [[0, 1], [3, 4], [6, 7]]),
+        ((  ['x', 'z']              ),          [[0, 2], [3, 5], [6, 8]]),
+        ((  [0], ['x', 'z']         ),          [0, 2]),
+        ((  [0, -1], ['x', 'z']     ),          [0, 8]),
+        ((  [0, 1], ['x', 'z']      ),          [0, 5]),
+        ((  slice(0, 2, 2), 'x'     ),          [0]),
+        ((  slice(0, 3, 2), 'x'     ),          [0, 6]),
+        ((  slice('y', 'z')         ),          [[1, 2], [4, 5], [7, 8]]),
+        ((  slice(None, 2), ['x', 'z']      ),  [[0, 2], [3, 5]]),
+        ((  slice(None, 2), ['x', 'y']      ),  [[0, 1], [3, 4]]),
+        ((  slice(None), ['x', 'y']         ),  [[0, 1], [3, 4], [6, 7]]),
+        ((  slice(0, 2, 2), ['x', 'y']      ),  [[0, 1]]),
+        ((  slice(0, 3, 2), ['x', 'y']      ),  [[0, 1], [6, 7]]),
+        ((  slice(0, 3, 2), 'x'             ),  [0, 6]),
+        ((  slice(2, 3), 'x'                ),  [6]),
+        ((  slice('z', 'y', -1)             ),  [[2, 1], [5, 4], [8, 7]]),
+        ((  slice('z', 'x', -1)             ),  [[2, 1, 0], [5, 4, 3], [8, 7, 6]]),
+        ((  slice('z', 'x', -2)             ),  [[2, 0], [5, 3], [8, 6]]),
+        ((  slice(None, None, -1)           ),  [[6,7,8],[3,4,5],[0,1,2]]),
+        ((  slice(None), slice(None, None, -1)             ),  [[2,1,0], [5,4,3], [8,7,6]]),
+        ((  slice(None), slice(None, None, -2)             ),  [[2, 0], [5, 3], [8, 6]]),
+    ]
+
+    for key, val in keys:
+        print(key, '?=', val)
+        print('->', da[key])
+        assert np.array_equal(da[key], val)
+
+    failures = [
+        ((  'x',1           ),  TypeError),
+        ((  slice(0,1,'y')  ),  TypeError),
+        ((  'a'             ),  KeyError),
+        ((  0.1             ),  KeyError),
+        ((  'a',1           ),  TypeError),
+        ((  ['a','x']       ),  KeyError),
+    ]
+    for key, err in failures:
+        print(key, '->', err)
+        try:
+            v = da[key]
+        except err:
+            pass
+        else:
+            raise Exception
