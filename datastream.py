@@ -595,9 +595,16 @@ def _parse_data_apply_keys(self, *data, **data_kw):
 
 class DataFileIO():
     @staticmethod
-    def parse_file(filename):
-        logger.debug(f"parse_file `{filename}`")
-        data, ff = DataFileIO.detect_format(filename)
+    def parse_string(string, newline=None):
+        file = io.StringIO(string, newline)
+        return DataFileIO.parse_file(file)
+
+    @staticmethod
+    def parse_file(file):
+        logger.debug(f"parse_file `{file}`")
+        if isinstance(file, str):
+            file = open(file, 'r')
+        data, ff = DataFileIO.detect_format(file)
 
         if data is not None:
             logger.debug((data, ff))
@@ -607,16 +614,16 @@ class DataFileIO():
             logger.debug((data, ff))
             return data, ff
         elif ff['file'] == 'numpy':
-            data = DataFileIO.do_numpy_csv(ff, filename)
+            data = DataFileIO.do_numpy_csv(ff, file)
         elif ff['file'] is None:
             try:
-                data = json.load(open(filename))
+                data = json.load(file)
             except json.JSONDecodeError as e:
                 logger.debug(f"Doing numpy {ff}")
-                data = DataFileIO.do_numpy_csv(ff, filename)
+                data = DataFileIO.do_numpy_csv(ff, file)
         elif ff['file'] == 'multiLine':
             logger.debug(f"Doing multiLine {ff}")
-            data = DataFileIO.do_multiline_literal(ff, filename)
+            data = DataFileIO.do_multiline_literal(ff, file)
         else:
             raise NotImplementedError(ff)
 
@@ -626,24 +633,28 @@ class DataFileIO():
     @staticmethod
     def readnlines(file, n=0):
         if n == -1:
-            return file.readlines()
+            rv = file.readlines()
+            file.seek(0)
+            return rv
         if n == 0:
-            return file.read()
+            rv = file.read()
+            file.seek(0)
+            return rv
         rv = []
         for i in range(n):
             line = file.readline()
             if line:
                 rv.append(line)
+        file.seek(0)
         return rv
 
     @staticmethod
-    def detect_format(filename):
-        logger.debug(f"detect_format {filename}")
-        file = open(filename)
+    def detect_format(file):
+        logger.debug(f"detect_format {file}")
         ff = {'data': None, 'file': None, 'header': None, 'dialect': None}
 
         try:
-            samplelines = DataFileIO.readnlines(file, 4)
+            samplelines = DataFileIO.readnlines(file, 3)
         except UnicodeDecodeError as e:
             ff['file'] = 'numpy'
             logger.debug(ff)
@@ -657,7 +668,7 @@ class DataFileIO():
                 logger.debug(ff)
                 return [], ff
 
-        logger.debug('here')
+        logger.debug(samplelines)
         if samplelines[0][0] in "[({":
             try:
                 sample = ast.literal_eval(samplelines[0])
@@ -668,7 +679,7 @@ class DataFileIO():
                     sample = ast.literal_eval(samplelines[0][1:])
                     logger.debug(f'sample {sample}')
                 else:
-                    file.seek(0)
+                    # file.seek(0)
                     sample = ast.literal_eval(file.read())
                     ff['file'] = 'multiLine'
                     ff['data'] = data_type(sample)
@@ -732,8 +743,6 @@ class DataFileIO():
                     logger.debug(f'HAS HEADER {hasheader}')
                     ff['header'] = samplelines[0] if hasheader else None
 
-        logger.debug(ff)
-
         if ff['file'] == 'oneLine':
             logger.debug((sample, ff))
             return sample, ff
@@ -741,9 +750,8 @@ class DataFileIO():
         return None, ff
 
     @staticmethod
-    def do_multiline_literal(ff, filename):
-        logger.debug(filename)
-        file = open(filename)
+    def do_multiline_literal(ff, file):
+        logger.debug(file)
 
         if ff['data'] in ['listOfLists', 'dictOfLists']:
             data = ast.literal_eval(file.read())
@@ -760,13 +768,26 @@ class DataFileIO():
         return data
 
     @staticmethod
-    def do_numpy_csv(ff, filename):
+    def do_numpy_csv(ff, file):
+        logger.debug(f"do_numpy_csv {ff}, {file}")
+        file.seek(0)
         try:
-            data = np.load(filename)
+            data = np.load(file)
+            logger.debug(f"do_numpy_csv loaded")
             ff['data'] = 'save'
             ff['file'] = 'numpy'
-        except ValueError:
-            kw = {'fname': filename}
+        except UnicodeDecodeError as e:
+            logger.debug(f"do_numpy_csv did not load {repr(e)}")
+            file.seek(0)
+            newfile = io.BytesIO(file.buffer.read())
+            data = DataFileIO.do_numpy_csv(ff, newfile)
+            logger.debug(f"data from BytesIO {repr(data)}")
+            return data
+        except (TypeError, ValueError) as e:
+            logger.debug(f"do_numpy_csv did not load {repr(e)}")
+            logger.debug(f"do_numpy_csv did not load, trying genfromtxt")
+            file.seek(0)
+            kw = {'fname': file}
             if ff['dialect']:
                 kw.update(delimiter=ff['dialect'].delimiter)
             if ff['header']:
@@ -775,11 +796,13 @@ class DataFileIO():
             ff['data'] = 'text'
             ff['file'] = 'csv'
 
+        logger.debug(f"do_numpy_csv {data}")
+
         if data.dtype.names is not None:
             ff['header'] = data.dtype.names
             if ff['data'] != 'text':
                 ff['data'] += '-structuredarray'
-
+        logger.debug(f"do_numpy_csv {ff}")
         return data
 parse_file = DataFileIO.parse_file
 
