@@ -151,12 +151,12 @@ class DictArray():
             data = data_kw
         elif len(data) == 1:
             data = data[0]
-        array, parse_keys, nkeys = parse_data(data)
+        array, parse_keys = parse_data(data)
 
-        if not nkeys:  # new data is useless
+        if parse_keys == 0:  # new data is useless
             return
-        if nkeys and not parse_keys:  # auto-generate keys
-            parse_keys = self.default_keys[:nkeys]
+        elif isinstance(parse_keys, int):  # auto-generate keys
+            parse_keys = self.default_keys[:parse_keys]
 
         for k in parse_keys:  # update rename dict with new keys
             if k in self._keys:
@@ -192,15 +192,17 @@ class DictArray():
         s = self.array.shape
         if self.array.size == 0 and self.array.ndim <= 1:  # no current data, no keys yet
             logger.info(f"append no data, no keys")
-            if parse_keys:  # new data not useless
-                logger.info(f"append updating keys")
-                self.array.resize(data.shape)
-                self.array[:] = data[:]
-                for k in parse_keys:
-                    try: self.default_keys.remove(k)
-                    except ValueError: pass
-                self._keys = tuple(parse_keys)
-                self._rename_dict.update((k,k) for k in parse_keys)
+            if isinstance(parse_keys, int):  # data does not have keys, has key count
+                parse_keys = self.default_keys[:parse_keys]
+
+            logger.info(f"append updating keys")
+            self.array.resize(data.shape)
+            self.array[:] = data[:]
+            for k in parse_keys:
+                try: self.default_keys.remove(k)
+                except ValueError: pass
+            self._keys = tuple(parse_keys)
+            self._rename_dict.update((k,k) for k in parse_keys)
             return data
 
         # have keys already set
@@ -445,12 +447,12 @@ def parse_data(data):
     names = ()  # keys to return
     logger.debug(f"parse_data `{repr(data)}`")
     if data is None:
-        return np.array([]), names, 0
+        return np.array([]), ()
     dt = data_type(data)
     logger.debug(f"dt={dt}")
     if dt == 'empty':
         logger.info(f"DOING empty {repr(data)}")
-        return np.array([]), names, 0
+        return np.array([]), ()
     elif dt == 'listOfLists':
         data_fields = data._fields if hasattr(data, '_fields') else None
         sample_fields = data[0]._fields if hasattr(data[0], '_fields') else None
@@ -463,7 +465,7 @@ def parse_data(data):
         else:
             data = np.array(data)
         logger.debug(f"listOfLists -> {repr(data)}")
-        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
+        return data, names or ((data.shape[1] or names) if data.ndim == 2 else names)
     elif dt == 'listOfDicts':
         sample = data[0]
         names = list(sample.keys())
@@ -474,12 +476,12 @@ def parse_data(data):
                 vv.append(v)
             vvv.append(vv)
         data = np.array(vvv)
-        return data, tuple(names), len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
+        return data, tuple(names) or (data.shape[1] if data.ndim == 2 else names)
     elif dt == 'listOfValues':
         if hasattr(data, '_fields'):  # namedtuple
             names = data._fields
         data = np.array([[*data]])
-        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
+        return data, names or (data.shape[1] if data.ndim == 2 else 0)
     elif dt == 'dictOfLists':
         names, data = tuple(data.keys()), list(map(lambda *a: list(a), *data.values()))  # transpose data
         data = np.array(data)
@@ -487,13 +489,13 @@ def parse_data(data):
         if data.size == 0:
             logger.debug('make to size')
             data.resize((0, len(names)))
-        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
+        return data, names or (data.shape[1] if data.ndim == 2 else names)
     elif dt == 'dictOfValues':
         names, data = tuple(data.keys()), [list(data.values())]
         logger.debug(f"dictOfValues {repr(data)}")
         data = np.array(data)
         logger.debug(f"dictOfValues {repr(data)}")
-        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
+        return data, names or (data.shape[1] if data.ndim == 2 else names)
     elif dt == 'recarray':
         names = data.dtype.names
         logger.debug(f"recarray {repr(data)}")
@@ -502,11 +504,11 @@ def parse_data(data):
         else:
             data = np.asanyarray(data.tolist())  # get list version to remove dtype // np.void
         logger.debug(f"recarray {repr(data)}")
-        return data, names, len(names) if names else (data.shape[1] if data.ndim == 2 else 0)
+        return data, names or (data.shape[1] if data.ndim == 2 else names)
     elif dt == 'ndarray':
-        return data.copy(), names, data.shape[1]
+        return data.copy(), data.shape[1] or names
     elif dt == 'DictArray':
-        return data.array.copy(), data._keys, len(data._keys)
+        return data.array.copy(), data._keys or names
     else:
         raise NotImplementedError(f"Cannot handle '{dt}' {data}")
 
@@ -568,9 +570,9 @@ def _parse_data_apply_keys(self, *data, **data_kw):
     if len(data) == 1:
         data = data[0]
 
-    array, parse_keys, nkeys = parse_data(data)
+    array, parse_keys = parse_data(data)
 
-    if parse_keys and self._rename_dict:  # take keys and rename them
+    if not isinstance(parse_keys, int) and self._rename_dict:  # take keys and rename them
         logger.info(f'_parse_data_apply_keys renaming')
         parse_keys = tuple(map(lambda k: self._rename_dict.get(k, k), parse_keys))
     elif self._rename_dict:
@@ -578,16 +580,16 @@ def _parse_data_apply_keys(self, *data, **data_kw):
         parse_keys = []
         len_keys = len(self._keys)
         new = 0
-        for i in range(nkeys):
+        for i in range(array.shape[1]):
             if i < len_keys:
                 result = self._keys[i]
             else:
                 result = self.default_keys[new]
                 new += 1
             parse_keys.append(result)
-    elif nkeys and not parse_keys:  # make automatic names
-        logger.info(f'_parse_data_apply_keys generating {nkeys} from {self.default_keys}')
-        parse_keys = self.default_keys[:nkeys]
+    elif parse_keys == 0:  # make automatic names
+        logger.info(f'_parse_data_apply_keys generating {array.shape[1]} from {self.default_keys}')
+        parse_keys = self.default_keys[:array.shape[1]]
     logger.info(f'_parse_data_apply_keys {repr(array)}, {parse_keys}')
 
     return array, parse_keys
