@@ -130,8 +130,10 @@ def _lru_cache_wrapper(user_function, maxsize, typed, _CacheInfo):
     return wrapper
 
 
-@lru_cache(128, typed=True)
+@lru_cache(512, typed=True)
 def contains_non_index(key):
+    if isinstance(key, (int, type(None), type(Ellipsis))):
+        return False
     if hasattr(key, '__iter__'):
         if isinstance(key, str):
             return True
@@ -139,7 +141,7 @@ def contains_non_index(key):
     elif isinstance(key, slice):
         return any(map(contains_non_index, (key.start, key.stop, key.step)))
     else:
-        return not isinstance(key, (int, type(None), type(Ellipsis), slice))
+        return True
 
 
 def do_keyed_slice(self, key):
