@@ -17,8 +17,6 @@ def test_dataType():
         listOfLists, listOfValues, ndarray, recarray, VALUES, \
         NAMEDTUPLEKEYS, RECARRAYKEYS, DICTKEYS
 
-    KEYS = ()
-
     for group in ['empty', 'dictOfLists', 'dictOfValues', 'listOfDicts', 'listOfLists', 'listOfValues', 'ndarray', 'recarray']:
         for k,v in locals()[group].items():
             logging.info(f"Testing {group} : {k} : {repr(v)}")
@@ -32,7 +30,10 @@ def test_dataType():
             elif k.lower().find('ntup')!=-1:
                 kcheck = NAMEDTUPLEKEYS
             else:
-                kcheck = KEYS
+                if k[-1] in ['2','3','4']:
+                    kcheck = 2
+                else:
+                    kcheck = ()
             logging.info(f"kcheck={kcheck}, vcheck={repr(vcheck)}")
             result = parse_data(v)
             logging.info(f"result={result}")

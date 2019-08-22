@@ -20,7 +20,7 @@ def test_parse_file():
         ff.pop('dialect', None)
         assert ff == loadfileformats[f]
 
-        r, keys, nkeys = parse_data(d)
+        r, keys = parse_data(d)
         if f.endswith('empty'):  # empty test
             assert r.size == 0
         else:
@@ -29,4 +29,4 @@ def test_parse_file():
             if f.find('dict') != -1 or f.find('header') != -1 or f.find('save_struct') != -1:
                 assert keys == KEYS  # should have correct keys based on file name
             else:
-                assert keys is ()  # uses default keys order
+                assert keys == 3  # uses default keys order
