@@ -144,6 +144,29 @@ def contains_non_index(key):
         return True
 
 
+def wrap_slice(self, start, stop, axis):
+    b = self.base
+    lim = b.shape[axis]
+    print('wrap_slice', start, stop, axis, lim)
+    if start == stop:
+        indices = slice(0,0)
+    else:
+        indices = tuple(map(lambda n: n%lim, range(start, stop)))
+    print('indices', indices)
+    return indices
+
+
+def update_view(self):
+    key = []
+    shape = self.shape
+    offset = self.offset
+    for i, d in enumerate(range(min(len(shape), self.base.ndim))):
+        key.append(wrap_slice(self, offset[i], offset[i]+shape[i], i))
+    key = np.meshgrid(*key,sparse=True,copy=False)
+    print('key', key)
+    return self.base[tuple(key)].T
+
+
 def do_keyed_slice(self, key):
     start, stop, step = key.start, key.stop, key.step
     if contains_non_index(step):
@@ -177,90 +200,3 @@ def is_sequence(obj):
     # taken from pyqtgraph.graphicsitems.PlotDataItem
     return hasattr(obj, '__iter__') or isinstance(obj, np.ndarray) or (
             hasattr(obj, 'implements') and obj.implements('MetaArray'))
-
-
-class ROI():
-    def __init__(self, arr, shape=(), offset=()):
-        self.base = arr
-        self._shape = shape or arr.shape
-        self._offset = offset or (0,)*arr.ndim
-        self._update_view()
-
-    @property
-    def offset(self):
-        return self._offset
-
-    @offset.setter
-    def offset(self, s):
-        self.locate(s)
-
-    @property
-    def shape(self):
-        return self._shape
-
-    @shape.setter
-    def shape(self, s):
-        self.resize(s)
-
-    def resize(self, newshape, *moreshape):
-        if newshape is None:
-            self.resize(self.base.shape)
-            return self
-        if not newshape and newshape != 0:
-            raise TypeError("resize() missing 1 required positional argument: 'newshape'")
-        if not hasattr(newshape, '__iter__'):
-            newshape = (newshape, *moreshape)
-        else:
-            newshape = (*newshape, *moreshape)
-        print('resize', newshape)
-        self._shape = newshape
-        self._update_view()
-        return self
-
-    def locate(self, newoffset, *moreoffset):
-        if not newoffset and newoffset != 0:
-            raise TypeError("locate() missing 1 required positional argument: 'newoffset'")
-        if not hasattr(newoffset, '__iter__'):
-            newoffset = (newoffset, *moreoffset)
-        else:
-            newoffset = (*newoffset, *moreoffset)
-        self._offset = newoffset
-        self._update_view()
-        return self
-
-    def _update_view(self):
-        key = []
-        shape = self.shape
-        offset = self.offset
-        for i, d in enumerate(range(min(len(shape), self.base.ndim))):
-            key.append(self.wrap_slice(offset[i], offset[i]+shape[i], i))
-        key = np.meshgrid(*key,sparse=True,copy=False)
-        print('key', key)
-        self._view = self.base[tuple(key)].T
-        print('view', self._view)
-
-    def wrap_slice(self, start, stop, axis):
-        b = self.base
-        lim = b.shape[axis]
-        print('wrap_slice', start, stop, axis)
-        if start == stop:
-            indices = slice(0,0)
-        else:
-            indices = tuple(map(lambda n: n%lim, range(start, stop)))
-        print('indices', indices)
-        return indices
-
-    def __getitem__(self, k):
-        return self._view.__getitem__(k)
-
-    def __setitem__(self, k, v):
-        return self._view.__setitem__(k, v)
-
-    def __repr__(self):
-        return repr(self._view)
-
-    def __getattr__(self, k):
-        try:
-            return self.__dict__[k]
-        except KeyError:
-            return getattr(self._view, k)

@@ -12,6 +12,71 @@ from collections import OrderedDict
 logger = logging.getLogger(__name__)
 
 
+class ROI():
+    def __init__(self, arr, shape=(), offset=()):
+        self.base = arr
+        self._shape = shape or arr.shape
+        self._offset = offset or (0,)*arr.ndim
+        self._view = utils.update_view(self)
+
+    def resize(self, newshape, *moreshape):
+        if newshape is None:
+            self.resize(self.base.shape)
+            return self
+        if not newshape and newshape != 0:
+            raise TypeError("resize() missing 1 required positional argument: 'newshape'")
+        if not hasattr(newshape, '__iter__'):
+            newshape = (newshape, *moreshape)
+        else:
+            newshape = (*newshape, *moreshape)
+        print('resize', newshape)
+        self._shape = newshape
+        self._view = utils.update_view(self)
+        return self
+
+    def locate(self, newoffset, *moreoffset):
+        if not newoffset and newoffset != 0:
+            raise TypeError("locate() missing 1 required positional argument: 'newoffset'")
+        if not hasattr(newoffset, '__iter__'):
+            newoffset = (newoffset, *moreoffset)
+        else:
+            newoffset = (*newoffset, *moreoffset)
+        self._offset = newoffset
+        self._view = utils.update_view(self)
+        return self
+
+    offset = property(lambda self: self._offset, locate)
+
+    shape = property(lambda self: self._shape, resize)
+
+    def shift(self, shift, *moreshift):
+        if not shift and shift != 0:
+            raise TypeError("shift() missing 1 required positional argument: 'shift'")
+        if not hasattr(shift, '__iter__'):
+            shift = (shift, *moreshift)
+        else:
+            shift = (*shift, *moreshift)
+        newoffset = (old + new for old, new in zip(self.offset, shift))
+        return self.locate(newoffset)
+
+    # <editor-fold> delegating to self._view
+    def __getitem__(self, k):
+        return self._view.__getitem__(k)
+
+    def __setitem__(self, k, v):
+        return self._view.__setitem__(k, v)
+
+    def __repr__(self):
+        return repr(self._view)
+
+    # def __getattr__(self, k):
+    #     try:
+    #         return self.__dict__[k]
+    #     except KeyError:
+    #         return getattr(self._view, k)
+    # </editor-fold>
+
+
 class DictArray():
     """Wrapper around np.ndarray that allows key indexing (like dict of arrays) and
             indexing/slicing in getitem/setitem.
