@@ -169,22 +169,18 @@ def fill_tuple(input, default):
             rv.append(input[i])
         else:
             rv.append(default[i])
-    print('fill_tuple', input, default, rv)
     return tuple(rv)
 
 
 def update_view(self):
     key = []
-    shape = self.shape
-    offset = self.offset
+    shape = self._roi_shape
+    offset = self._roi_offset
     for i in range(self.base.ndim):
-        # key.append(wrap_slice(self, offset[i], offset[i]+input[i], i))
-        key.append(slice(*slice(offset[i], offset[i]+shape[i]).indices(self.base.shape[i])))
-    # key = tuple(np.meshgrid(*key,sparse=True,copy=False))
+        key.append(slice(*slice(max(offset[i], 0), max(offset[i]+shape[i], 0)).indices(self.base.shape[i])))
     key = tuple(key)
     print('final key', key)
     rv = self.base[key]
-    self._shape = rv.shape
     return rv
 
 
