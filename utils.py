@@ -156,15 +156,36 @@ def wrap_slice(self, start, stop, axis):
     return indices
 
 
+def fill_tuple(input, default):
+    if not hasattr(input, '__iter__'):
+        input = (input,)
+    if not hasattr(default, '__iter__'):
+        default = (default,)
+    ls = len(input)
+    lb = len(default)
+    rv = []
+    for i in range(lb):
+        if i < ls:
+            rv.append(input[i])
+        else:
+            rv.append(default[i])
+    print('fill_tuple', input, default, rv)
+    return tuple(rv)
+
+
 def update_view(self):
     key = []
     shape = self.shape
     offset = self.offset
-    for i, d in enumerate(range(min(len(shape), self.base.ndim))):
-        key.append(wrap_slice(self, offset[i], offset[i]+shape[i], i))
-    key = np.meshgrid(*key,sparse=True,copy=False)
-    print('key', key)
-    return self.base[tuple(key)].T
+    for i in range(self.base.ndim):
+        # key.append(wrap_slice(self, offset[i], offset[i]+input[i], i))
+        key.append(slice(*slice(offset[i], offset[i]+shape[i]).indices(self.base.shape[i])))
+    # key = tuple(np.meshgrid(*key,sparse=True,copy=False))
+    key = tuple(key)
+    print('final key', key)
+    rv = self.base[key]
+    self._shape = rv.shape
+    return rv
 
 
 def do_keyed_slice(self, key):

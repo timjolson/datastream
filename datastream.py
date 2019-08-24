@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 class ROI():
     def __init__(self, arr, shape=(), offset=()):
         self.base = arr
-        self._shape = shape or arr.shape
-        self._offset = offset or (0,)*arr.ndim
+        self._shape = utils.fill_tuple(shape, arr.shape)
+        self._offset = utils.fill_tuple(offset, (0,)*arr.ndim)
         self._view = utils.update_view(self)
 
     def resize(self, newshape, *moreshape):
@@ -30,19 +30,26 @@ class ROI():
         else:
             newshape = (*newshape, *moreshape)
         print('resize', newshape)
-        self._shape = newshape
+        self._shape = utils.fill_tuple(newshape, self.base.shape)
         self._view = utils.update_view(self)
+        # self._shape = self._view.shape
         return self
 
     def locate(self, newoffset, *moreoffset):
+        if newoffset is None:
+            self.locate((0,)*self.base.ndim)
+            return self
         if not newoffset and newoffset != 0:
             raise TypeError("locate() missing 1 required positional argument: 'newoffset'")
         if not hasattr(newoffset, '__iter__'):
             newoffset = (newoffset, *moreoffset)
         else:
             newoffset = (*newoffset, *moreoffset)
-        self._offset = newoffset
+        self._offset = utils.fill_tuple(newoffset, (0,)*self.base.ndim)
+        print(self._offset, self._shape)
         self._view = utils.update_view(self)
+        print(self._offset, self._shape)
+        print('locate', self._offset)
         return self
 
     offset = property(lambda self: self._offset, locate)
@@ -50,14 +57,32 @@ class ROI():
     shape = property(lambda self: self._shape, resize)
 
     def shift(self, shift, *moreshift):
+        if shift is None:
+            self.locate(None)
+            return self
         if not shift and shift != 0:
             raise TypeError("shift() missing 1 required positional argument: 'shift'")
         if not hasattr(shift, '__iter__'):
             shift = (shift, *moreshift)
         else:
             shift = (*shift, *moreshift)
-        newoffset = (old + new for old, new in zip(self.offset, shift))
+        print('shift', shift)
+        newoffset = utils.fill_tuple([old + new for old, new in zip(self.offset, shift)], self.offset)
+        print('shift', newoffset)
         return self.locate(newoffset)
+
+    def stretch(self, stretch, *morestretch):
+        if stretch is None:
+            self.resize(None)
+            return self
+        if not stretch and stretch != 0:
+            raise TypeError("stretch() missing 1 required positional argument: 'stretch'")
+        if not hasattr(stretch, '__iter__'):
+            stretch = (stretch, *morestretch)
+        else:
+            stretch = (*stretch, *morestretch)
+        newshape = (old + new for old, new in zip(self.shape, stretch))
+        return self.resize(newshape)
 
     # <editor-fold> delegating to self._view
     def __getitem__(self, k):
@@ -69,11 +94,11 @@ class ROI():
     def __repr__(self):
         return repr(self._view)
 
-    # def __getattr__(self, k):
-    #     try:
-    #         return self.__dict__[k]
-    #     except KeyError:
-    #         return getattr(self._view, k)
+    def __getattr__(self, k):
+        try:
+            return self.__dict__[k]
+        except KeyError:
+            return getattr(self._view, k)
     # </editor-fold>
 
 
@@ -606,7 +631,7 @@ def data_type(obj):
                     return 'listOfValues'
                 elif obj.dtype.names:
                     return 'recarray'
-            # elif obj.ndim == 2 and obj.dtype.names is None and obj.shape[1] == 2:
+            # elif obj.ndim == 2 and obj.dtype.names is None and obj.input[1] == 2:
             #     return 'Nx2array'
             elif obj.ndim == 2:
                 if obj.dtype.names is None:
@@ -614,7 +639,7 @@ def data_type(obj):
                 else:
                     return 'recarray'
             else:
-                raise Exception('array shape must be (N points, N keys); got %s instead' % str(obj.shape))
+                raise Exception('array input must be (N points, N keys); got %s instead' % str(obj.shape))
 
         first = obj[0]
 
