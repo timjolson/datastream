@@ -15,9 +15,12 @@ logger = logging.getLogger(__name__)
 class ROI():
     def __init__(self, arr, shape=(), offset=()):
         self.base = arr
-        self._shape = utils.fill_tuple(shape, arr.shape)
-        self._offset = utils.fill_tuple(offset, (0,)*arr.ndim)
-        self._view = utils.update_view(self)
+        self._roi_shape = utils.fill_tuple(shape, arr.shape)
+        self._roi_offset = utils.fill_tuple(offset, (0,) * arr.ndim)
+        self.roi = utils.update_view(self)
+
+    roi_offset = property(lambda self: self._roi_offset)
+    roi_shape = property(lambda self: self._roi_shape)
 
     def resize(self, newshape, *moreshape):
         if newshape is None:
@@ -29,10 +32,11 @@ class ROI():
             newshape = (newshape, *moreshape)
         else:
             newshape = (*newshape, *moreshape)
-        print('resize', newshape)
-        self._shape = utils.fill_tuple(newshape, self.base.shape)
-        self._view = utils.update_view(self)
-        # self._shape = self._view.shape
+        self._roi_shape = utils.fill_tuple(
+            [max(min(new, self.base.shape[i]), 0) for i, new in enumerate(newshape)],
+            self.base.shape
+        )
+        self.roi = utils.update_view(self)
         return self
 
     def locate(self, newoffset, *moreoffset):
@@ -45,16 +49,9 @@ class ROI():
             newoffset = (newoffset, *moreoffset)
         else:
             newoffset = (*newoffset, *moreoffset)
-        self._offset = utils.fill_tuple(newoffset, (0,)*self.base.ndim)
-        print(self._offset, self._shape)
-        self._view = utils.update_view(self)
-        print(self._offset, self._shape)
-        print('locate', self._offset)
+        self._roi_offset = utils.fill_tuple(newoffset, (0,) * self.base.ndim)
+        self.roi = utils.update_view(self)
         return self
-
-    offset = property(lambda self: self._offset, locate)
-
-    shape = property(lambda self: self._shape, resize)
 
     def shift(self, shift, *moreshift):
         if shift is None:
@@ -66,9 +63,7 @@ class ROI():
             shift = (shift, *moreshift)
         else:
             shift = (*shift, *moreshift)
-        print('shift', shift)
-        newoffset = utils.fill_tuple([old + new for old, new in zip(self.offset, shift)], self.offset)
-        print('shift', newoffset)
+        newoffset = utils.fill_tuple([old + new for old, new in zip(self.roi_offset, shift)], self.roi_offset)
         return self.locate(newoffset)
 
     def stretch(self, stretch, *morestretch):
@@ -81,24 +76,27 @@ class ROI():
             stretch = (stretch, *morestretch)
         else:
             stretch = (*stretch, *morestretch)
-        newshape = (old + new for old, new in zip(self.shape, stretch))
+        newshape = utils.fill_tuple(
+            [max(min(old + new, self.base.shape[i]), 0) for i, (old, new) in enumerate(zip(self.roi_shape, stretch))],
+            self.roi_shape
+        )
         return self.resize(newshape)
 
-    # <editor-fold> delegating to self._view
+    # <editor-fold> delegating to self.roi
     def __getitem__(self, k):
-        return self._view.__getitem__(k)
+        return self.roi.__getitem__(k)
 
     def __setitem__(self, k, v):
-        return self._view.__setitem__(k, v)
+        return self.roi.__setitem__(k, v)
 
     def __repr__(self):
-        return repr(self._view)
+        return repr(self.roi)
 
     def __getattr__(self, k):
         try:
             return self.__dict__[k]
         except KeyError:
-            return getattr(self._view, k)
+            return getattr(self.roi, k)
     # </editor-fold>
 
 
