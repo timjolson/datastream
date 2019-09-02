@@ -68,7 +68,6 @@ def check_datastreams_equal(one, two):
 def test_base_constructor():
     logging.debug('---------------Begin test_base_constructor()')
     ds = DataStream()
-    assert ds.dtype == np.float64
 
 
 def test_construct_equal():
@@ -80,127 +79,8 @@ def test_construct_equal():
 
 def test_dataType():
     logging.debug('---------------Begin test_dataType()')
-    assert data_type(DataStream()) == 'empty'
+    assert data_type(DataStream()) == 'DictArray'
     assert data_type(DataStream([[], [], []])) == 'DictArray'
-
-
-def test_add_points():
-    logging.debug('---------------Begin test_add_points()')
-
-    ds = DataStream()
-    add_point_tester(ds)
-    check_post_add_point(ds)
-
-    ds = DataStream()
-    ds.append(1, 2)
-    # assert np.all(ds.array == np.array([[1],[2]]))
-    ds.append({'x':3, 'y':4})
-    # assert np.all(ds.array == np.array([[1,3],[2,4]]))
-    ds.append((5, 6))
-    # assert np.all(ds.array == np.array([[1,3,5],[2,4,6]]))
-    ds.append([[7], [8]])
-    # assert np.all(ds.array == np.array([[1,3,5,7],[2,4,6,8]]))
-    ds.append(y=10, x=9)
-    # assert np.all(ds.array == np.array([[1,3,5,7,9],[2,4,6,8,10]]))
-    ds.append([(11), (12)])
-    # assert np.all(ds.array == np.array([[1,3,5,7,9,11],[2,4,6,8,10,12]]))
-    ds.append(np.array([[13], [14]]))
-    # assert np.all(ds.array == np.array([[1,3,5,7,9,11,13],[2,4,6,8,10,12,14]]))
-
-    assert np.all(ds['x'] == [1,3,5,7,9,11,13])
-    assert np.all(ds['y'] == [2,4,6,8,10,12,14])
-    assert np.all(ds[:,0] == [1,2])
-    assert np.all(ds[:,1] == [3,4])
-    assert np.all(ds[:,2] == [5,6])
-    assert np.all(ds[:,3] == [7,8])
-    assert np.all(ds[:,4] == [9,10])
-    assert np.all(ds[:,5] == [11,12])
-    assert np.all(ds[:,6] == [13,14])
-
-
-def test_extend_points():
-    logging.debug('---------------Begin test_extend_points()')
-
-    ds = DataStream()
-    add_point_tester(ds)
-    check_post_add_point(ds)
-
-    ds = DataStream()
-    ds.append([1, 3], [2, 4])
-    # assert np.all(ds.array == np.array([[1,3],[2,4]]))
-    ds.append({'x':[5, 7], 'y':[6, 8]})
-    # assert np.all(ds.array == np.array([[1,3,5,7],[2,4,6,8]]))
-    ds.append(y=[10, 12], x=[9, 11])
-    # assert np.all(ds.array == np.array([[1,3,5,7,9,11],[2,4,6,8,10,12]]))
-    ds.append(np.array([[13, 15], [14, 16]]))
-    # assert np.all(ds.array == np.array([[1,3,5,7,9,11,13,15],[2,4,6,8,10,12,14,16]]))
-
-    assert np.all(ds['x'] == [1,3,5,7,9,11,13,15])
-    assert np.all(ds['y'] == [2,4,6,8,10,12,14,16])
-    assert np.all(ds[:,0] == [1,2])
-    assert np.all(ds[:,1] == [3,4])
-    assert np.all(ds[:,2] == [5,6])
-    assert np.all(ds[:,3] == [7,8])
-    assert np.all(ds[:,4] == [9,10])
-    assert np.all(ds[:,5] == [11,12])
-    assert np.all(ds[:,6] == [13,14])
-    assert np.all(ds[:,7] == [15,16])
-
-
-def test_add_point_error():
-    logging.debug('---------------Begin test_add_point_error()')
-    ds = DataStream()
-    add_point_tester(ds)
-
-    logging.debug('---------------Start exceptions')
-    with pytest.raises(ValueError):
-        try:
-            ds.append((0, 1))
-        except Exception as e:
-            logging.debug(e)
-            raise
-    with pytest.raises(ValueError):
-        try:
-            ds.append(0, 1)
-        except Exception as e:
-            logging.debug(e)
-            raise
-    with pytest.raises(ValueError):
-        try:
-            ds.append(x=0, y=1)
-        except Exception as e:
-            logging.debug(e)
-            raise
-    with pytest.raises(ValueError):
-        try:
-            ds.append({'y':99, 'z':10})
-        except Exception as e:
-            logging.debug(e)
-            raise
-    with pytest.raises(ValueError):
-        try:
-            ds.append((0, 1, 2, 3))
-        except Exception as e:
-            logging.debug(e)
-            raise
-    with pytest.raises(ValueError):
-        try:
-            ds.append(0, 1, 2, 3)
-        except Exception as e:
-            logging.debug(e)
-            raise
-    with pytest.raises(ValueError):
-        try:
-            ds.append(x=0, y=1, z=2, w=3)
-        except Exception as e:
-            logging.debug(e)
-            raise
-    with pytest.raises(ValueError):
-        try:
-            ds.append({'x':0, 'y':99, 'z':10, 'w':1})
-        except Exception as e:
-            logging.debug(e)
-            raise
 
 
 def test_record_file_csv():
