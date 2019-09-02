@@ -112,7 +112,7 @@ class DictArray():
             `list of lists`, `list of dicts`, `list of values`, `np.recarray`, `np.ndarray`
             NOTE: any `list` in above formats can be a sequence with __iter__
         keys: dict or iterable; dict will rename data by its own keys, iterable will rename in order.
-            Keys will be automatically generated when needed from DictArray.DictArray_default_keys;
+            Keys will be automatically generated when needed from DictArray.default_keys;
             When keys are renamed, the new name is used for indexing.
 
     Methods:
@@ -157,12 +157,12 @@ class DictArray():
 
     Written by Tim Olson - timjolson@user.noreplay.github.com
     """
-    DictArray_default_keys = string.ascii_letters[23:26] + string.ascii_letters[0:23]
-    DictArray_default_keys = list(''.join([DictArray_default_keys, DictArray_default_keys.upper()]))
+    default_keys = string.ascii_letters[23:26] + string.ascii_letters[0:23]
+    default_keys = list(''.join([default_keys, default_keys.upper()]))
 
     def __init__(self, data=None, keys=None):
         logger.debug(f"data={data}, keys={keys}")
-        self.default_keys = self.DictArray_default_keys.copy()
+        self._default_keys = self.default_keys.copy()
         self._keys = ()
         self._rename_dict = rnd = OrderedDict()
         self.array = np.array([])
@@ -183,7 +183,7 @@ class DictArray():
                 if i < len(self._keys):
                     rnd[self._keys[i]] = k
                 else:
-                    extra_keys[self.default_keys[new]] = k
+                    extra_keys[self._default_keys[new]] = k
                     new += 1
         else:
             for k, v in keys.items():  # handle renaming, spare keys
@@ -197,7 +197,7 @@ class DictArray():
             self.extend(OrderedDict([(v,np.full(self.array.shape[0], np.nan)) for v in extra_keys.values()]))
 
         self._keys = tuple(rnd.values())  # update _keys for indexing, iterating
-        logger.info(f"after init keys {self._keys}, {repr(self.array)}, {self.default_keys}")
+        logger.info(f"after init keys {self._keys}, {repr(self.array)}, {self._default_keys}")
 
     def rename(self, input_key, new_access_key):
         """Rename an incoming data key to index it by another key
@@ -217,13 +217,13 @@ class DictArray():
             self.rename(input_key, new_access_key)
             return
 
-        if old_access_key in self.DictArray_default_keys:
+        if old_access_key in self.default_keys:
             logger.info(f're-add {old_access_key}')
-            self.default_keys.append(old_access_key)
+            self._default_keys.append(old_access_key)
 
         self._rename_dict[input_key] = new_access_key
         for k in self._rename_dict.values():
-            try: self.default_keys.remove(k)
+            try: self._default_keys.remove(k)
             except ValueError: pass
         self._keys = tuple(self._rename_dict.values())
 
@@ -244,14 +244,14 @@ class DictArray():
         if parse_keys == 0:  # new data is useless
             return
         elif isinstance(parse_keys, int):  # auto-generate keys
-            parse_keys = self.default_keys[:parse_keys]
+            parse_keys = self._default_keys[:parse_keys]
 
         for k in parse_keys:  # update rename dict with new keys
             if k in self._keys:
                 raise ValueError(f"Key {k} already assigned")
             self._rename_dict[k] = k
-        for k in self._rename_dict.values():  # update default_keys list
-            try: self.default_keys.remove(k)
+        for k in self._rename_dict.values():  # update _default_keys list
+            try: self._default_keys.remove(k)
             except ValueError: pass
         self._keys = tuple(self._rename_dict.values())  # update self._keys
 
@@ -281,13 +281,13 @@ class DictArray():
         if self.array.size == 0 and self.array.ndim <= 1:  # no current data, no keys yet
             logger.info(f"append no data, no keys")
             if isinstance(parse_keys, int):  # data does not have keys, has key count
-                parse_keys = self.default_keys[:parse_keys]
+                parse_keys = self._default_keys[:parse_keys]
 
             logger.info(f"append updating keys")
             self.array.resize(data.shape)
             self.array[:] = data[:]
             for k in parse_keys:
-                try: self.default_keys.remove(k)
+                try: self._default_keys.remove(k)
                 except ValueError: pass
             self._keys = tuple(parse_keys)
             self._rename_dict.update((k,k) for k in parse_keys)
