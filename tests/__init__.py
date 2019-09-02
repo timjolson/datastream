@@ -68,7 +68,7 @@ list(map(groups.pop, (k for k,v in list(groups.items()) if k.startswith('_'))))
 groups.pop('VALUES')
 
 
-data_set_dir = './tests/data_sets'
+data_set_dir = 'data_sets'
 header = ('x', 'y', 'time')
 loadfileformats = {
     'csv':                      {'file':'csv', 'data':'text', 'header':None},
@@ -90,11 +90,11 @@ loadfileformats = {
     'np_savetxt_structarr':     {'file':'csv', 'data':'text', 'header':None},
     'np_savetxt_structarr_header':  {'file':'csv', 'data':'text', 'header':('x', 'y', 'time')},
     'np_savetxt_structarr_header_delim':    {'file':'csv', 'data':'text', 'header':('x', 'y', 'time')},
-    'some_dicts_multiline':     {'file':'multiLine', 'data':'listOfDicts', 'header':None},
-    'some_dicts_oneline':       {'file':'oneLine', 'data':'listOfDicts', 'header':None},
-    # 'some_lists_header':        {'file':'multiLine', 'data':'listOfValues', 'header':('x', 'y', 'time')},
-    'some_lists_multiline':     {'file':'multiLine', 'data':'listOfValues', 'header':None},
-    'some_lists_oneline':       {'file':'oneLine', 'data':'listOfLists', 'header':None},
+    'some_dicts_multiline':     {'file':'multiLine', 'data':'someDicts', 'header':None},
+    # 'some_dicts_oneline':       {'file':'oneLine', 'data':'someDicts', 'header':None},
+    # 'some_lists_header':        {'file':'multiLine', 'data':'someLists', 'header':('x', 'y', 'time')},
+    'some_lists_multiline':     {'file':'multiLine', 'data':'someLists', 'header':None},
+    # 'some_lists_oneline':       {'file':'oneLine', 'data':'someLists', 'header':None},
 }
 filenames = [os.path.join(data_set_dir,f) for f in loadfileformats]
 for f in list(loadfileformats.keys()):
