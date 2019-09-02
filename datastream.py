@@ -436,10 +436,10 @@ class DataStream(DictArray):
 
     Written by Tim Olson - timjolson@user.noreplay.github.com
     """
-    def __init__(self, data=None, record_to_file=None, pause=None, file_format='csv', **kwargs):
+    def __init__(self, data=None, keys=None, record_to_file=None, pause=None, file_format='csv'):
         if isinstance(data, str):
             data, self.file_format = DataFileIO.parse_file(data)
-        super().__init__(data, **kwargs)
+        super().__init__(data, keys)
         self._file_inited = False
         self._recorder = lambda *x, **y: None
         self._pause = pause if (pause is not None) else (record_to_file is None)
@@ -450,7 +450,7 @@ class DataStream(DictArray):
         if not self._pause and self._recorder:
             if not self._file_inited:
                 self._init_file()
-            for p in data.T:
+            for p in data:
                 self._recorder(p)
         return data
 
@@ -774,6 +774,11 @@ class DataFileIO():
                     ff['file'] = 'multiLine'
                     ff['data'] = data_type(sample)
                     return sample, ff
+            if n_samplelines == 1:
+                ff['file'] = 'oneLine'
+            else:
+                ff['file'] = 'multiLine'
+
             if isinstance(sample, dict):
                 ff['data'] = 'dict'
                 itemsample = list(sample.values())[0]
@@ -782,12 +787,7 @@ class DataFileIO():
                 elif n_samplelines == 1:
                     ff['data'] += 'OfValues'
                 else:
-                    ff['data'] = 'listOfDicts'
-
-                if n_samplelines == 1:
-                    ff['file'] = 'oneLine'
-                else:
-                    ff['file'] = 'multiLine'
+                    ff['data'] = 'someDicts'
 
             elif utils.is_sequence(sample):
                 ff['data'] = 'list'
@@ -797,12 +797,8 @@ class DataFileIO():
                 elif utils.is_sequence(itemsample):
                     ff['data'] += 'OfLists'
                 else:
-                    ff['data'] += 'OfValues'
+                    ff['data'] = 'someLists'
 
-                if n_samplelines == 1:
-                    ff['file'] = 'oneLine'
-                else:
-                    ff['file'] = 'multiLine'
             else:
                 raise TypeError(type(sample), sample)
         else:
@@ -846,6 +842,8 @@ class DataFileIO():
         if ff['data'] in ['listOfLists', 'dictOfLists']:
             data = ast.literal_eval(file.read())
         elif ff['data'] in ['listOfDicts', 'listOfValues']:
+            data = [ast.literal_eval(l) for l in file.readlines()]
+        elif ff['data'] in ['someDicts', 'someLists']:
             data = [ast.literal_eval(l) for l in file.readlines()]
         elif ff['data'] == 'unknown':
             logger.debug(f"Doing unknown {ff}")
