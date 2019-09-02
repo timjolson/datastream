@@ -672,12 +672,12 @@ def _parse_data_apply_keys(self, *data, **data_kw):
             if i < len_keys:
                 result = self._keys[i]
             else:
-                result = self.default_keys[new]
+                result = self._default_keys[new]
                 new += 1
             parse_keys.append(result)
     elif parse_keys == 0:  # make automatic names
         logger.info(f'_parse_data_apply_keys generating {array.shape[1]} from {self.default_keys}')
-        parse_keys = self.default_keys[:array.shape[1]]
+        parse_keys = self._default_keys[:array.shape[1]]
     logger.info(f'_parse_data_apply_keys {repr(array)}, {parse_keys}')
 
     return array, parse_keys
