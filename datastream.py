@@ -77,7 +77,7 @@ class ROI():
         else:
             stretch = (*stretch, *morestretch)
         newshape = utils.fill_tuple(
-            [max(min(old + new, self.base.shape[i]), 0) for i, (old, new) in enumerate(zip(self.roi_shape, stretch))],
+            [old + new for old, new in zip(self.roi_shape, stretch)],
             self.roi_shape
         )
         return self.resize(newshape)
