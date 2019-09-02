@@ -68,7 +68,7 @@ list(map(groups.pop, (k for k,v in list(groups.items()) if k.startswith('_'))))
 groups.pop('VALUES')
 
 
-data_set_dir = 'data_sets'
+data_set_dir = './tests/data_sets'
 header = ('x', 'y', 'time')
 loadfileformats = {
     'csv':                      {'file':'csv', 'data':'text', 'header':None},
