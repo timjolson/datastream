@@ -147,12 +147,17 @@ def test_constructor_keys():
     assert np.array_equal(da['a'], Dict['x'])
     assert np.array_equal(da['b'], Dict['y'])
     assert np.array_equal(da['c'], Dict['z'])
+    # logging.debug(da._default_keys)
+    # check = list(i not in da._default_keys for i in manual_keys)
+    # logging.debug(check)
+    assert all(i not in da._default_keys for i in manual_keys)
 
     da = DictArray(List, keys=manual_keys)
     assert da._keys == manual_keys
     assert np.array_equal(da['a'], Dict['x'])
     assert np.array_equal(da['b'], Dict['y'])
     assert np.array_equal(da['c'], Dict['z'])
+    assert all(i not in da._default_keys for i in manual_keys)
 
     da = DictArray(Dict, keys=manual_keys_extra)
     assert da._keys == manual_keys_extra
@@ -160,6 +165,7 @@ def test_constructor_keys():
     assert np.array_equal(da['b'], Dict['y'])
     assert np.array_equal(da['c'], Dict['z'])
     assert np.isnan(da['D'].sum())
+    assert all(i not in da._default_keys for i in manual_keys_extra)
 
     da = DictArray(List, keys=manual_keys_extra)
     assert da._keys == manual_keys_extra
@@ -167,12 +173,14 @@ def test_constructor_keys():
     assert np.array_equal(da['b'], Dict['y'])
     assert np.array_equal(da['c'], Dict['z'])
     assert np.isnan(da['D'].sum())
+    assert all(i not in da._default_keys for i in manual_keys_extra)
 
     da = DictArray(List, keys=rn_dict)
     assert da._keys == manual_keys
     assert np.array_equal(da['a'], Dict['x'])
     assert np.array_equal(da['b'], Dict['y'])
     assert np.array_equal(da['c'], Dict['z'])
+    assert all(i not in da._default_keys for i in rn_dict.values())
 
     da = DictArray(List, keys=rn_dict_extra_keys)
     assert da._keys == manual_keys_extra
@@ -180,6 +188,7 @@ def test_constructor_keys():
     assert np.array_equal(da['b'], Dict['y'])
     assert np.array_equal(da['c'], Dict['z'])
     assert np.isnan(da['D'].sum())
+    assert all(i not in da._default_keys for i in rn_dict_extra_keys.values())
 
     with pytest.raises(ValueError):
         da = DictArray(Dict, keys=('a', 'b'))

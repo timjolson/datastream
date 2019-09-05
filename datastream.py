@@ -131,13 +131,11 @@ class DictArray():
             therefore other indices cannot also be used:
                 obj['x'] -> ok  ;  obj[1,'x'] -> ok  ;  obj['x',1] -> TypeError
         When slicing, keys can be used for start and stop, but not step. They also
-            convert the slice into INCLUDING the stop index:
+            convert the slice to INCLUSIVE (index group includes the stop index):
             obj = DictArray([[1,2,3],[4,5,6]])
-            obj['x':'y'] == obj['x':2] == obj[0:'y'] -> [[1,2],[4,5]]
-            obj['x':'z'] == obj['x':3] == obj[0:'z']-> [[1,2,3],[4,5,6]]
+            obj['x':'y'] == obj['x':1] == obj[0:'y'] -> [[1,2],[4,5]]
+            obj['x':'z'] == obj['x':2] == obj[0:'z']-> [[1,2,3],[4,5,6]]
             obj[0:2:'x'] -> KeyError  ;  obj['x':'z':'y'] -> KeyError
-        When slicing, keys can also be used to reverse ordering:
-            obj['z':'y'] == obj[2:1:-1] == obj[2:'y':-1] -> [[3,2],[6,5]]
 
     Key setting
         DictArray([[0,1],[2,3]], keys=('a', 'b'))  # keys specified by iterable, assigned in order
@@ -181,7 +179,10 @@ class DictArray():
             new = 0
             for i, k in enumerate(keys):  # handle renaming, spare keys
                 if i < len(self._keys):
-                    rnd[self._keys[i]] = k
+                    sk = self._keys[i]
+                    if sk in DictArray.default_keys:
+                        self._default_keys.append(sk)
+                    rnd[sk] = k
                 else:
                     extra_keys[self._default_keys[new]] = k
                     new += 1
@@ -195,6 +196,10 @@ class DictArray():
         if extra_keys:  # extend data for spare keys
             logger.info(f'have extra keys {extra_keys}')
             self.extend(OrderedDict([(v,np.full(self.array.shape[0], np.nan)) for v in extra_keys.values()]))
+
+        for k in self._rename_dict.values():  # update _default_keys list
+            try: self._default_keys.remove(k)
+            except ValueError: pass
 
         self._keys = tuple(rnd.values())  # update _keys for indexing, iterating
         logger.info(f"after init keys {self._keys}, {repr(self.array)}, {self._default_keys}")
@@ -226,6 +231,7 @@ class DictArray():
             try: self._default_keys.remove(k)
             except ValueError: pass
         self._keys = tuple(self._rename_dict.values())
+        return self
 
     def extend(self, *data, **data_kw):
         """Process and add data points as columns/new keys
