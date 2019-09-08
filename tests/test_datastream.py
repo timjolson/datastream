@@ -1,31 +1,15 @@
 import pytest
 import os
 import logging
-from collections import namedtuple
 import numpy as np
+import sys
 
 from datastream import DataStream, data_type
+from . import filenames
 
-logging.basicConfig(filename='logs/test_datastream.log', filemode='w', level=logging.INFO)
-
-# test data
-dict1 = {'x': [], 'y': []}
-dict2 = {'x': 1.0, 'y': 1.0}
-dict3 = {'x': [2.0, 3.0], 'y': [2.0, 3.0]}
-point_test = namedtuple('point_test', 'x, y')
-ntup1 = point_test([], [])
-ntup2 = point_test(1.0, 1.0)
-ntup3 = point_test([2.0, 3.0], [2.0, 3.0])
-tup1 = ([], [])
-tup2 = (1.0, 1.0)
-tup3 = ([2.0, 3.0], [2.0, 3.0])
-np1 = (np.array([]), np.array([]))
-np2 = (np.array(1.0), np.array(1.0))
-np3 = (np.array([2.0, 3.0]), np.array([2.0, 3.0]))
-VALUES1 = np.array([[],[]])
-VALUES2 = np.array([[1.0],[1.0]])
-VALUES3 = np.array([[2.0,3.0],[2.0,3.0]])
-KEYS = {'x', 'y'}
+# logging.basicConfig(filename='logs/test_datastream.log', filemode='w', level=logging.DEBUG)
+TRACEBACK_FMT = 'File "%(pathname)s", line %(lineno)d:'
+logging.basicConfig(stream=sys.stdout, format=TRACEBACK_FMT+'%(message)s', filemode='w', level=logging.DEBUG)
 
 
 def add_point_tester(ds):
@@ -77,60 +61,35 @@ def test_construct_equal():
     check_datastreams_equal(ds1, ds2)
 
 
-def test_dataType():
+def test_data_type():
     logging.debug('---------------Begin test_dataType()')
     assert data_type(DataStream()) == 'DictArray'
     assert data_type(DataStream([[], [], []])) == 'DictArray'
 
 
-def test_record_file_csv():
-    logging.debug('---------------Begin test_record_file_csv()')
+def test_load_file():
+    logging.debug('---------------Begin test_load_file()')
 
-    file = './logs/datastream_test_record_file_csv.log'
-    try: os.remove(file)
-    except: pass
+    # data_set_dir = 'data_sets'
+    # filenames = [os.path.join(data_set_dir, f) for f in os.listdir(data_set_dir) if not f.startswith('.')]
 
-    dict2 = {'x': 1.0, 'y': 1.0}
+    for file in filenames:
+        logging.debug(f'Loading {file}')
+        ds = DataStream(file)
+        logging.debug(f'Data is {ds}')
 
-    ds = DataStream(record_to_file=file)
+        if not file.endswith('empty'):
+            assert np.array_equal(ds, [[4, 8, 0], [5, 9, 1], [6, 10, 2], [7, 11, 3]])
 
-    ds.append(dict2)
-    assert open(file, 'r').read() == (os.linesep).join(['x,y', '1.0,1.0'])+os.linesep
-
-    ds.append(dict2)
-    assert open(file, 'r').read() == (os.linesep).join(['x,y', '1.0,1.0', '1.0,1.0'])+os.linesep
-
-
-def test_record_file_dict():
-    logging.debug('---------------Begin test_record_file_dict()')
-
-    file = './logs/datastream_test_record_file_dict.log'
-    try: os.remove(file)
-    except: pass
-
-    dict2 = {'x': 1.0, 'y': 1.0}
-
-    ds = DataStream(record_to_file=file, file_format='dict')
-    ds.append(dict2)
-    assert str({'x':1.0,'y':1.0}) + os.linesep == open(file, 'r').readlines()[-1]
-
-    ds.append(dict2)
-    assert str({'x':1.0,'y':1.0}) + os.linesep == open(file, 'r').readlines()[-1]
+        if file.find('header') != -1 or file.find('structured') != -1 or file.find('dict') != -1:
+            assert ds._keys == ('x', 'y', 'time')
+        elif file.endswith('empty'):
+            assert ds.array.size == 0
+            assert ds._keys == ()
+        else:
+            assert ds._keys == ('x', 'y', 'z')
 
 
-def test_record_file_list():
-    logging.debug('---------------Begin test_record_file_list()')
+def test_load_append_text_source():
+    logging.debug('---------------Begin test_load_append_text_source()')
 
-    file = './logs/datastream_test_record_file_list.log'
-    try: os.remove(file)
-    except: pass
-
-    dict2 = {'x': 1.0, 'y': 1.0}
-
-    ds = DataStream(record_to_file=file, file_format='list')
-    ds.append(dict2)
-    assert 'x,y' + os.linesep + str(list(dict2.values())) + os.linesep == open(file, 'r').read()
-    assert str(list(dict2.values())) + os.linesep == open(file, 'r').readlines()[-1]
-
-    ds.append(dict2)
-    assert str(list(dict2.values())) + os.linesep == open(file, 'r').readlines()[-1]

@@ -147,12 +147,12 @@ def contains_non_index(key):
 def wrap_slice(self, start, stop, axis):
     b = self.base
     lim = b.shape[axis]
-    print('wrap_slice', start, stop, axis, lim)
+    # print('wrap_slice', start, stop, axis, lim)
     if start == stop:
         indices = slice(0,0)
     else:
         indices = tuple(map(lambda n: n%lim, range(start, stop)))
-    print('indices', indices)
+    # print('indices', indices)
     return indices
 
 
@@ -179,7 +179,7 @@ def update_view(self):
     for i in range(self.base.ndim):
         key.append(slice(*slice(max(offset[i], 0), max(offset[i]+shape[i], 0)).indices(self.base.shape[i])))
     key = tuple(key)
-    print('final key', key)
+    # print('final key', key)
     rv = self.base[key]
     return rv
 

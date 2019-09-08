@@ -425,7 +425,7 @@ class DictArray():
 
 
 class DataStream(DictArray):
-    """DictArray with data recording functions.
+    """DictArray with file handling functions.
 
     .set_record_file(file, format)
         set a file/object/function used to record data points.
@@ -442,14 +442,20 @@ class DataStream(DictArray):
 
     Written by Tim Olson - timjolson@user.noreplay.github.com
     """
-    def __init__(self, data=None, keys=None, record_to_file=None, pause=None, file_format='csv'):
-        if isinstance(data, str):
-            data, self.file_format = DataFileIO.parse_file(data)
-        super().__init__(data, keys)
+    def __init__(self, data=None, keys=None, record_to_file=None, pause=None):
+        self.file_format = None
+        self._has_file = False
         self._file_inited = False
         self._recorder = lambda *x, **y: None
+
+        if isinstance(data, (str, io.IOBase)):
+            record_to_file = data
+            data, self.file_format = DataFileIO.parse_file(data)
+            self._has_file = True
+        super().__init__(data, keys)
+
+        self.set_record_file(record_to_file, format=self.file_format)
         self._pause = pause if (pause is not None) else (record_to_file is None)
-        self.set_record_file(record_to_file, format=file_format)
 
     def append(self, *data, **kwargs):
         data = super().append(*data, **kwargs)
@@ -466,7 +472,7 @@ class DataStream(DictArray):
     def stop_recording(self):
         self._pause = True
 
-    def set_record_file(self, file, format='csv'):
+    def set_record_file(self, file, format=None):
         """Set a file/object/function used to record data array.
 
         :param file:
@@ -797,13 +803,17 @@ class DataFileIO():
 
             elif utils.is_sequence(sample):
                 ff['data'] = 'list'
-                itemsample = sample[0]
-                if isinstance(itemsample, dict):
-                    ff['data'] += 'OfDicts'
-                elif utils.is_sequence(itemsample):
-                    ff['data'] += 'OfLists'
+                try:
+                    itemsample = sample[0]
+                except IndexError:
+                    ff['data'] += 'OfEmpty'
                 else:
-                    ff['data'] = 'someLists'
+                    if isinstance(itemsample, dict):
+                        ff['data'] += 'OfDicts'
+                    elif utils.is_sequence(itemsample):
+                        ff['data'] += 'OfLists'
+                    else:
+                        ff['data'] = 'someLists'
 
             else:
                 raise TypeError(type(sample), sample)
