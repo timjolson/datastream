@@ -1,24 +1,24 @@
 import numpy as np
 import os
-from generalUtils.datastream.datastream import DataStream
+from datastream import DataStream
 
 time, x, y = [0,1,2,3], [4,5,6,7], [8,9,10,11]
 data_set_dir = os.path.join('tests', 'data_sets')
 filenames = [os.path.join(data_set_dir,f) for f in os.listdir(data_set_dir) if not f.startswith('.')]
 
-reads = [DataStream({'x':x,'y':y,'time':time})]
+known = DataStream({'x':x,'y':y,'time':time})
 for f in filenames:
+    print(f)
     r = DataStream(f)
-    reads.append(r)
     if not f.endswith('empty'):
         try:
-            assert np.array_equal(r, reads[0])
+            assert np.array_equal(r, known)
         except AssertionError:
             print('############', f)
-            print(reads[0])
+            print(known)
             print(r)
         if f.find('dict') != -1 or f.find('header') != -1 or f.find('save_struct') != -1:
-            assert set(r.keys()) == set(reads[0].keys())
+            assert set(r.keys()) == set(known.keys())
         else:
             assert set(r.keys()) == set(['x', 'y', 'z'])
     else:
