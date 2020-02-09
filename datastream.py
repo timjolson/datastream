@@ -152,8 +152,6 @@ class DictArray():
         obj = DictArray({x:[0], y:[1]})  # keys specified in data
         obj[y] == obj[:,1] == obj[:,y] == [1]
         obj[y][0] == obj[0][1] == obj[0,1] == obj[0,y] == 1
-
-    Written by Tim Olson - timjolson@user.noreplay.github.com
     """
     default_keys = string.ascii_letters[23:26] + string.ascii_letters[0:23]
     default_keys = list(''.join([default_keys, default_keys.upper()]))
@@ -439,8 +437,6 @@ class DataStream(DictArray):
 
     .start_recording()
     .stop_recording()
-
-    Written by Tim Olson - timjolson@user.noreplay.github.com
     """
     def __init__(self, data=None, keys=None, record_to_file=None, pause=None):
         self.file_format = None
