@@ -59,3 +59,7 @@ DictArray with data recording functions.
 
     .start_recording()  # begin recording appended data 
     .stop_recording()  # stop recording appended data
+
+## License
+
+See [LICENSE](LICENSE) for details.

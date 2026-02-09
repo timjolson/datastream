@@ -5,6 +5,9 @@ description = ""
 authors = [
     { name = "timjolson", email = "timjolson@users.noreply.github.com" }
 ]
+readme = "README.md"
+urls = { "Homepage" = "https://github.com/timjolson/datastream" }
+license = { file = "LICENSE" }
 dependencies = [
     "numpy"
 ]
